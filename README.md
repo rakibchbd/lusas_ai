@@ -105,6 +105,21 @@ The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle
 still trains and evaluates a candidate before promotion.
 
+To start the worker automatically when you log in on macOS, install the
+LaunchAgent once:
+
+~~~text
+python3 -m lusas_ai service install
+~~~
+
+It starts at login, restarts after an exit, and uses `launchd`'s network-state
+keep-alive. Logs are written to `.lusas/auto-upgrade.log` and
+`.lusas/auto-upgrade-error.log`. Remove it with:
+
+~~~text
+python3 -m lusas_ai service remove
+~~~
+
 To talk directly with the trained LUSAS model, first prepare and promote a
 candidate, then start the interactive model runner:
 
