@@ -24,37 +24,24 @@ def load_cases(path: Path) -> list[dict[str, str]]:
 
 def evaluate(model_path: Path, data_path: Path, max_new_tokens: int = 128) -> dict:
     try:
-        import torch
-        from peft import AutoPeftModelForCausalLM
-        from transformers import AutoTokenizer
+        from training.run_model import generate_loaded, load_model
     except ImportError as exc:
         raise RuntimeError(
             "Model runtime dependencies are missing. Install them with the same "
             "Python interpreter: python3 -m pip install -r training/requirements.txt"
         ) from exc
 
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    model = AutoPeftModelForCausalLM.from_pretrained(
-        model_path,
-        dtype=torch.float32,
-    ).to(device)
+    torch, tokenizer, model, device = load_model(model_path)
     results = []
     for case in load_cases(data_path):
-        formatted = (
-            "### Instruction:\n"
-            f"{case['instruction']}\n\n"
-            "### Response:\n"
+        generated = generate_loaded(
+            torch,
+            tokenizer,
+            model,
+            device,
+            case["instruction"],
+            max_new_tokens,
         )
-        inputs = tokenizer(formatted, return_tensors="pt")
-        inputs = {key: value.to(device) for key, value in inputs.items()}
-        with torch.no_grad():
-            output = model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-            )
-        generated = tokenizer.decode(output[0], skip_special_tokens=True)
         expected = case["expected"]
         passed = expected in generated
         results.append(
