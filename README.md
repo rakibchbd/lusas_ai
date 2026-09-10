@@ -83,12 +83,42 @@ candidate, evaluates it against the regression set, and promotes it only when
 all evaluation cases pass. It never replaces the production model with an
 untested candidate.
 
+Collect additional official documentation samples for review:
+
+~~~text
+python3 -m lusas_ai collect-web
+~~~
+
+The collector is limited to official Python, MDN, and PyTorch documentation,
+checks `robots.txt`, applies a 512 KB response limit and a five-second delay,
+and writes samples to `.lusas/web_pending.jsonl`. Web content is not added to
+training automatically; review it before approving it with `lusas learn`.
+
 When `auto_publish_upgrades` is enabled, a passing upgrade is also recorded in
 the tracked learning history, committed to a new `lusas/upgrade-*` branch,
 pushed to `origin`, and submitted as a pull request with `gh`. It will not
 publish if the working tree already contains local changes. Model weight files
 remain local because they are excluded by `.gitignore`; the pull request
 contains the learned data and upgrade history, not large model binaries.
+
+The configured automatic model-upgrade interval is five minutes. Keep the
+continuous worker running with `python3 training/auto_upgrade.py`; each cycle
+still trains and evaluates a candidate before promotion.
+
+To start the worker automatically when you log in on macOS, install the
+LaunchAgent once:
+
+~~~text
+python3 -m lusas_ai service install
+~~~
+
+It starts at login, restarts after an exit, and uses `launchd`'s network-state
+keep-alive. Logs are written to `.lusas/auto-upgrade.log` and
+`.lusas/auto-upgrade-error.log`. Remove it with:
+
+~~~text
+python3 -m lusas_ai service remove
+~~~
 
 To talk directly with the trained LUSAS model, first prepare and promote a
 candidate, then start the interactive model runner:

@@ -24,6 +24,7 @@ class Settings:
     auto_publish_upgrades: bool = True
     model_upgrade_interval_minutes: int = 1440
     notify_file: str = ".lusas/notifications.jsonl"
+    web_pending_file: str = ".lusas/web_pending.jsonl"
 
     @property
     def workspace_root(self) -> Path:
@@ -77,6 +78,9 @@ class Settings:
                 )
             ),
             notify_file=str(payload.get("notify_file", cls.notify_file)),
+            web_pending_file=str(
+                payload.get("web_pending_file", cls.web_pending_file)
+            ),
         )
 
     @property
@@ -86,3 +90,7 @@ class Settings:
     @property
     def learning_path(self) -> Path:
         return (self.root / self.learning_file).resolve()
+
+    @property
+    def web_pending_path(self) -> Path:
+        return (self.root / self.web_pending_file).resolve()
