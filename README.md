@@ -106,17 +106,16 @@ checks `robots.txt`, applies a 512 KB response limit and a five-second delay,
 and writes samples to `.lusas/web_pending.jsonl`. Web content is not added to
 training automatically; review it before approving it with `lusas learn`.
 
-Upgrades remain local by design. The model, source changes, learned records,
-version state, and logs are never pushed automatically to GitHub. Review and
-push changes manually when you are ready.
+Upgrades remain completely local by design. The model, source changes, learned
+records, version state, and logs use only the local filesystem. No GitHub
+account, API, remote, push, pull request, or repository connection is used.
 
 The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle
 still trains and evaluates a candidate before promotion.
 
 Source evolution records a permanent JSONL history entry for every proposal,
-including its unified diff, quality metrics, deployment result, and (when
-enabled) the local Git commit. Diffs are retained under
+including its unified diff, quality metrics, and deployment result. Diffs are retained under
 `.lusas/upgrade-diffs/`, and progress events are retained in
 `.lusas/evolution-progress.jsonl`. Native notifications use `osascript` on
 macOS, `notify-send` on Linux, and a PowerShell Windows toast when available;
@@ -130,11 +129,9 @@ python3 -m lusas_ai report
 python3 -m lusas_ai report --json
 ~~~
 
-Creating a local Git commit for an applied source upgrade is opt-in and
-remains disabled by default. Set both `evolution_enabled`/the relevant
-application setting and `"git_commit_upgrades": true` in `config.json` to
-enable it. Commits are local only; no GitHub push or pull request is ever
-performed automatically. The `evolve` command prints each gate as it runs.
+The `evolve` command prints each gate as it runs. The automatic local worker
+is configured to run model and source-code upgrades every five minutes after
+the macOS LaunchAgent is installed.
 
 Run the guarded code-evolution pipeline directly with:
 
@@ -149,11 +146,9 @@ guarded evolution pipeline analyzes the repository, validates protected paths,
 creates an isolated candidate workspace, runs standard-library AST security
 checks and the full unit-test suite, records quality metrics, and compares
 the candidate before deployment. Invalid, unsafe, or failing proposals are
-rejected and logged without stopping the next cycle. Evolution is local-only:
-it never pushes to GitHub, performs unrestricted crawling, or deploys arbitrary
-code. Candidates are limited to `lusas_ai/`, `tests/`, and `training/`, and
-rollback backups remain available under `.lusas/backups/`. Validated code
-changes are staged unless `auto_apply_upgrades` is also enabled.
+rejected and logged without stopping the next cycle. Candidates are limited to
+`lusas_ai/`, `tests/`, and `training/`, and rollback backups remain available
+under `.lusas/backups/`.
 
 The worker fingerprints its training and evaluation inputs. If nothing changed
 since the previous successful cycle, it records a `skipped` event instead of

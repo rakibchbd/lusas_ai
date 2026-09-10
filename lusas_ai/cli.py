@@ -137,10 +137,6 @@ def main(argv: list[str] | None = None) -> int:
                 f"{'enabled' if agent.settings.evolution_enabled else 'disabled'} "
                 f"({agent.settings.evolution_interval_minutes} minute interval)"
             )
-            print(
-                "Local Git commits: "
-                f"{'enabled' if agent.settings.git_commit_upgrades else 'disabled'}"
-            )
             return 0
 
         if args.command == "monitor":
@@ -218,8 +214,6 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Backup: {result.backup}")
             if result.diff_path:
                 print(f"Diff: {result.diff_path}")
-            if result.git_commit:
-                print(f"Git commit: {result.git_commit}")
             return 0 if result.status in {"staged", "promoted"} else 1
 
         if args.command == "rollback":

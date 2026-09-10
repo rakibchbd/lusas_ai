@@ -22,7 +22,6 @@ class Settings:
     auto_apply_upgrades: bool = False
     auto_model_upgrades: bool = True
     auto_code_upgrades: bool = False
-    git_commit_upgrades: bool = False
     model_upgrade_interval_minutes: int = 5
     evolution_enabled: bool = False
     evolution_interval_minutes: int = 5
@@ -78,9 +77,6 @@ class Settings:
             ),
             auto_code_upgrades=bool(
                 payload.get("auto_code_upgrades", cls.auto_code_upgrades)
-            ),
-            git_commit_upgrades=bool(
-                payload.get("git_commit_upgrades", cls.git_commit_upgrades)
             ),
             model_upgrade_interval_minutes=int(
                 payload.get(

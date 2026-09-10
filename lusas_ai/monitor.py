@@ -40,7 +40,6 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
             "evolution_enabled": settings.evolution_enabled,
             "auto_apply_upgrades": settings.auto_apply_upgrades,
             "auto_code_upgrades": settings.auto_code_upgrades,
-            "git_commit_upgrades": settings.git_commit_upgrades,
         },
         "upgrade_count": state.get("upgrade_count", 0),
         "current_version": f"{int(state.get('upgrade_count', 0)) / 1_000_000:.6f}",
@@ -66,7 +65,6 @@ def snapshot(settings: Settings, recent: int = 10) -> str:
         f"Recorded events: {len(events)}",
         f"Successful upgrades: {state.get('upgrade_count', 0)}",
         f"Current version: {int(state.get('upgrade_count', 0)) / 1_000_000:.6f}",
-        f"Evolution Git commits: {'enabled' if settings.git_commit_upgrades else 'disabled'}",
     ]
     if learned:
         lines.append("\nLearned examples:")
@@ -89,8 +87,7 @@ def snapshot(settings: Settings, recent: int = 10) -> str:
                 f"version={version} status={upgrade.get('status')} "
                 f"score={upgrade.get('score', '-')}, "
                 f"learned={upgrade.get('learned_examples', 0)} "
-                f"deployment={upgrade.get('deployment', '-')} "
-                f"git={upgrade.get('git_commit') or '-'}"
+                f"deployment={upgrade.get('deployment', '-')}"
             )
     progress = _read_events(settings.progress_path)
     if progress:
