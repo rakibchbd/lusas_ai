@@ -11,6 +11,12 @@ class TrainedModelIdentityTests(unittest.TestCase):
             IDENTITY_RESPONSE,
         )
 
+    def test_indirect_creator_question_never_reaches_the_model(self) -> None:
+        self.assertEqual(
+            generate_loaded(None, None, None, "cpu", "who the maker is?", 128),
+            IDENTITY_RESPONSE,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

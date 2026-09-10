@@ -15,6 +15,10 @@ CREATOR_QUESTION = re.compile(
     r"\b(?:who|what)\s+(?:made|created|built|developed|designed|authored)\s+you\b"
     r"|\b(?:who|what)\s+is\s+your\s+(?:creator|maker|developer|author|designer)\b"
     r"|\bwho\s+developed\s+you\b"
-    r"|\bwho\s+(?:made|created|developed|built)\s+(?:lusas|lusa)\b",
+    r"|\bwho\s+(?:made|created|developed|built)\s+(?:lusas|lusa)\b"
+    r"|\bwho\s+the\s+(?:creator|maker|developer|author|designer)\s+is\b"
+    r"|\bwho\s+is\s+the\s+(?:creator|maker|developer|author|designer)"
+    r"(?:\s+of\s+(?:lusas(?:\s+ai)?|lusa))?\b"
+    r"|\b(?:creator|maker|developer|author|designer)\s+of\s+(?:lusas(?:\s+ai)?|lusa)\b",
     re.IGNORECASE,
 )
