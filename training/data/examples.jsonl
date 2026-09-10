@@ -1,0 +1,2 @@
+{"instruction":"Write a Python function that returns the larger of two integers.","output":"def larger(a: int, b: int) -> int:\n    return a if a >= b else b\n"}
+{"instruction":"Write a Python function that removes duplicate strings while preserving order.","output":"def unique_in_order(items: list[str]) -> list[str]:\n    seen: set[str] = set()\n    result: list[str] = []\n    for item in items:\n        if item not in seen:\n            seen.add(item)\n            result.append(item)\n    return result\n"}

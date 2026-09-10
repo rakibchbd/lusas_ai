@@ -1,0 +1,9 @@
+{
+  "ollama_url": "http://127.0.0.1:11434",
+  "model": "qwen2.5-coder:7b",
+  "workspace": "workspace",
+  "auto_apply_upgrades": true,
+  "auto_model_upgrades": true,
+  "model_upgrade_interval_minutes": 1440,
+  "notify_file": ".lusas/notifications.jsonl"
+}

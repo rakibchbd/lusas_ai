@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lusas-ai"
+version = "0.1.0"
+description = "A local-first coding agent with tested self-upgrades."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+lusas = "lusas_ai.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["lusas_ai*"]

@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+
+def load_model(model_path: Path):
+    try:
+        import torch
+        from peft import AutoPeftModelForCausalLM
+        from transformers import AutoTokenizer
+    except ImportError as exc:
+        raise RuntimeError(
+            "Model runtime dependencies are missing. Install training/requirements.txt."
+        ) from exc
+
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoPeftModelForCausalLM.from_pretrained(
+        model_path,
+        dtype=torch.float32,
+    ).to(device)
+    return torch, tokenizer, model, device
+
+
+def generate_loaded(torch, tokenizer, model, device: str, prompt: str, max_new_tokens: int) -> str:
+    formatted = (
+        "### Instruction:\n"
+        f"{prompt}\n\n"
+        "### Response:\n"
+    )
+    inputs = tokenizer(formatted, return_tensors="pt")
+    inputs = {key: value.to(device) for key, value in inputs.items()}
+    with torch.no_grad():
+        output = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+        )
+    generated_tokens = output[0][inputs["input_ids"].shape[-1] :]
+    return tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
+
+
+def generate(model_path: Path, prompt: str, max_new_tokens: int = 128) -> str:
+    torch, tokenizer, model, device = load_model(model_path)
+    return generate_loaded(torch, tokenizer, model, device, prompt, max_new_tokens)
+
+
+def interactive(model_path: Path, max_new_tokens: int) -> None:
+    torch, tokenizer, model, device = load_model(model_path)
+    print("LUSAS model chat. Type /exit to quit.")
+    while True:
+        try:
+            prompt = input("\nYou> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if prompt.lower() in {"/exit", "/quit"}:
+            return
+        if not prompt:
+            continue
+        print("\nLUSAS> " + generate_loaded(
+            torch, tokenizer, model, device, prompt, max_new_tokens
+        ))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run a trained LUSAS model.")
+    parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument("--prompt")
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Keep the model loaded and accept multiple prompts.",
+    )
+    parser.add_argument("--max-new-tokens", type=int, default=128)
+    args = parser.parse_args()
+    if args.interactive and args.prompt:
+        parser.error("--interactive cannot be combined with --prompt")
+    if not args.interactive and not args.prompt:
+        parser.error("provide --prompt or use --interactive")
+    if args.interactive:
+        interactive(args.model, args.max_new_tokens)
+    else:
+        print(generate(args.model, args.prompt, args.max_new_tokens))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
