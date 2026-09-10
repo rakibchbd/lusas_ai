@@ -189,15 +189,21 @@ return {"summary":"no safe improvement","files":{}}."""
             f"{self.prompt}\n\nGoal:\n{goal}\n\n"
             f"Repository fingerprint: {report.fingerprint}\nSource:\n{snapshot}"
         )
-        start = response.find("{")
-        if start < 0:
+        starts = [index for index, character in enumerate(response) if character == "{"]
+        if not starts:
             raise EvolutionRejected("The local model did not return a JSON proposal.")
-        try:
-            payload = json.JSONDecoder().raw_decode(response[start:])[0]
-        except json.JSONDecodeError as exc:
-            raise EvolutionRejected("The local model returned invalid proposal JSON.") from exc
-        if not isinstance(payload, dict):
-            raise EvolutionRejected("The proposal must be a JSON object.")
+        payload = None
+        decoder = json.JSONDecoder()
+        for start in starts:
+            try:
+                candidate = decoder.raw_decode(response[start:])[0]
+            except json.JSONDecodeError:
+                continue
+            if isinstance(candidate, dict):
+                payload = candidate
+                break
+        if payload is None:
+            raise EvolutionRejected("The local model returned invalid proposal JSON.")
         summary = payload.get("summary")
         changes = payload.get("files")
         if not isinstance(summary, str) or not summary.strip():

@@ -57,16 +57,18 @@ def clean_model_response(response: str) -> str:
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:
-    start = text.find("{")
-    if start < 0:
+    starts = [index for index, character in enumerate(text) if character == "{"]
+    if not starts:
         raise ProposalError("The model did not return a JSON object.")
-    try:
-        result, _ = json.JSONDecoder().raw_decode(text[start:])
-    except json.JSONDecodeError as exc:
-        raise ProposalError("The self-upgrade proposal was not valid JSON.") from exc
-    if not isinstance(result, dict):
-        raise ProposalError("The self-upgrade proposal must be a JSON object.")
-    return result
+    decoder = json.JSONDecoder()
+    for start in starts:
+        try:
+            result, _ = decoder.raw_decode(text[start:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(result, dict):
+            return result
+    raise ProposalError("The self-upgrade proposal was not valid JSON.")
 
 
 class LusasAgent:

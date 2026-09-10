@@ -7,6 +7,8 @@ from lusas_ai.evolution import (
     CandidateWorkspace,
     EvolutionOrchestrator,
     EvolutionRejected,
+    ImprovementPlanner,
+    RepositoryReport,
     ProtectedPathValidator,
     SecurityChecker,
 )
@@ -21,6 +23,19 @@ class FakeModel:
 
 
 class EvolutionTests(unittest.TestCase):
+    def test_planner_accepts_json_wrapped_in_markdown(self) -> None:
+        summary, changes = ImprovementPlanner(
+            FakeModel(
+                '```json\n{"summary":"no safe improvement","files":{}}\n```'
+            )
+        ).plan(
+            RepositoryReport(Path("/tmp"), (), "fingerprint", 0, 0),
+            "",
+            "test",
+        )
+        self.assertEqual(summary, "no safe improvement")
+        self.assertEqual(changes, {})
+
     def test_validator_rejects_protected_and_traversal_paths(self) -> None:
         validator = ProtectedPathValidator()
         for path in ("config.json", "lusas_ai/../config.json", ".git/hooks/x"):
