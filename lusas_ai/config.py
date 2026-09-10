@@ -22,6 +22,7 @@ class Settings:
     auto_apply_upgrades: bool = False
     auto_model_upgrades: bool = True
     auto_publish_upgrades: bool = True
+    auto_code_upgrades: bool = True
     model_upgrade_interval_minutes: int = 1440
     notify_file: str = ".lusas/notifications.jsonl"
     web_pending_file: str = ".lusas/web_pending.jsonl"
@@ -72,6 +73,9 @@ class Settings:
             ),
             auto_publish_upgrades=bool(
                 payload.get("auto_publish_upgrades", cls.auto_publish_upgrades)
+            ),
+            auto_code_upgrades=bool(
+                payload.get("auto_code_upgrades", cls.auto_code_upgrades)
             ),
             model_upgrade_interval_minutes=int(
                 payload.get(

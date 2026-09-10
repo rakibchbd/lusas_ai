@@ -28,8 +28,21 @@ def publish_upgrade(
             raise PublishError((completed.stderr or completed.stdout).strip())
         return completed.stdout.strip()
 
-    if run("git", "status", "--porcelain"):
-        raise PublishError("Cannot publish while the working tree has local changes.")
+    status = run("git", "status", "--porcelain")
+    unexpected = [
+        line[3:]
+        for line in status.splitlines()
+        if line and line[3:] not in {
+            "training/data/learned.jsonl",
+            "training/upgrade_history.jsonl",
+        }
+        and not line[3:].startswith(("lusas_ai/", "tests/", "training/"))
+    ]
+    if unexpected:
+        raise PublishError(
+            "Cannot publish while unrelated working-tree changes exist: "
+            + ", ".join(unexpected)
+        )
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     branch = f"lusas/upgrade-{timestamp}"
@@ -59,7 +72,7 @@ def publish_upgrade(
 
     run("git", "switch", "-c", branch)
     try:
-        run("git", "add", "training/data/learned.jsonl", "training/upgrade_history.jsonl")
+        run("git", "add", "lusas_ai", "tests", "training/data/learned.jsonl", "training/upgrade_history.jsonl")
         run("git", "commit", "-m", f"LUSAS model upgrade {timestamp}")
         run("git", "push", "--set-upstream", "origin", branch)
         pr_url = run(

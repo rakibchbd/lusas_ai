@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from lusas_ai.config import Settings
+from lusas_ai.agent import LusasAgent, ProposalError
 from lusas_ai.notifications import notify
 from lusas_ai.publisher import publish_upgrade
 from lusas_ai.upgrade_log import next_version, record
@@ -61,6 +62,37 @@ def run_once(root: Path) -> dict:
         encoding="utf-8",
     )
 
+    code_upgrade = {"status": "disabled"}
+    if report["passed"] and settings.auto_code_upgrades:
+        try:
+            agent = LusasAgent(root)
+            summary, changes = agent.propose_self_upgrade(
+                "Review the LUSAS source for one small, measurable reliability, "
+                "testability, or performance improvement. Return no change if "
+                "there is no safe improvement."
+            )
+            if changes:
+                result = agent.self_upgrade(
+                    f"Autonomous code improvement: {summary}",
+                    apply=True,
+                )
+                code_upgrade = {
+                    "status": "applied" if result.applied else "staged",
+                    "summary": summary,
+                    "tests_passed": result.tests.passed,
+                    "files": sorted(changes),
+                }
+            else:
+                code_upgrade = {"status": "no_change", "summary": summary}
+        except (ProposalError, ValueError, OSError, RuntimeError) as exc:
+            code_upgrade = {"status": "rejected", "error": str(exc)}
+            notify(
+                root,
+                settings.notification_path,
+                "Autonomous code upgrade rejected.",
+                error=str(exc),
+            )
+
     if report["passed"]:
         version = next_version(settings.upgrade_state_path)
         backup = promote(candidate, root, evaluation_passed=True)
@@ -81,6 +113,7 @@ def run_once(root: Path) -> dict:
             score=report["score"],
             publication=publication,
             version=version,
+            code_upgrade=code_upgrade,
         )
         record(
             settings.upgrade_log_path,
@@ -99,6 +132,7 @@ def run_once(root: Path) -> dict:
             "backup": str(backup),
             "score": report["score"],
             "publication": publication,
+            "code_upgrade": code_upgrade,
         }
 
     notify(
@@ -116,12 +150,14 @@ def run_once(root: Path) -> dict:
         candidate=str(candidate),
         score=report["score"],
         learned_examples=len(records),
+        code_upgrade=code_upgrade,
     )
     data_path.unlink(missing_ok=True)
     return {
         "status": "rejected",
         "candidate": str(candidate),
         "score": report["score"],
+        "code_upgrade": code_upgrade,
     }
 
 

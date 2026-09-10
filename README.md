@@ -105,6 +105,12 @@ The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle
 still trains and evaluates a candidate before promotion.
 
+With `auto_code_upgrades` enabled, each passing model cycle also asks the
+current local LUSAS model to propose a small source-code improvement. The
+proposal is staged in isolation, tested with the full unit-test suite, and
+applied only when tests pass. Invalid, unsafe, or failing proposals are
+rejected and logged without stopping the next cycle.
+
 Every successful promotion increments the local LUSAS version by `0.000001`.
 For example, the first successful upgrade is `0.000001`, followed by
 `0.000002`. Rejected candidates do not increment the version, but every attempt
