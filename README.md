@@ -95,20 +95,15 @@ candidate, evaluates it against the regression set, and promotes it only when
 all evaluation cases pass. It never replaces the production model with an
 untested candidate.
 
-Collect additional official documentation samples for review:
-
-~~~text
-python3 -m lusas_ai collect-web
-~~~
-
-The collector is limited to official Python, MDN, and PyTorch documentation,
-checks `robots.txt`, applies a 512 KB response limit and a five-second delay,
-and writes samples to `.lusas/web_pending.jsonl`. Web content is not added to
-training automatically; review it before approving it with `lusas learn`.
+LUSAS answers entirely from its local model, approved local training data, and
+configured local workspace. Chat never calls a web API or external answer
+service. Hugging Face is used only to download model files during setup or
+training; inference itself runs locally.
 
 Upgrades remain completely local by design. The model, source changes, learned
-records, version state, and logs use only the local filesystem. No GitHub
-account, API, remote, push, pull request, or repository connection is used.
+records, version state, and logs use only the local filesystem. No external
+answer API, GitHub account, remote, push, pull request, or repository
+connection is used.
 
 The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle

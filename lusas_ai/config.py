@@ -26,7 +26,6 @@ class Settings:
     evolution_enabled: bool = False
     evolution_interval_minutes: int = 5
     notify_file: str = ".lusas/notifications.jsonl"
-    web_pending_file: str = ".lusas/web_pending.jsonl"
     upgrade_log_file: str = ".lusas/upgrade_log.jsonl"
     upgrade_state_file: str = ".lusas/upgrade_state.json"
     cycle_state_file: str = ".lusas/cycle_state.json"
@@ -93,9 +92,6 @@ class Settings:
                 )
             ),
             notify_file=str(payload.get("notify_file", cls.notify_file)),
-            web_pending_file=str(
-                payload.get("web_pending_file", cls.web_pending_file)
-            ),
             upgrade_log_file=str(
                 payload.get("upgrade_log_file", cls.upgrade_log_file)
             ),
@@ -118,10 +114,6 @@ class Settings:
     @property
     def learning_path(self) -> Path:
         return (self.root / self.learning_file).resolve()
-
-    @property
-    def web_pending_path(self) -> Path:
-        return (self.root / self.web_pending_file).resolve()
 
     @property
     def upgrade_log_path(self) -> Path:

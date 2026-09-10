@@ -9,7 +9,6 @@ from .agent import LusasAgent
 from .local_model import LocalModelError
 from .monitor import follow, report, snapshot
 from .service import install_service, remove_service
-from .web_learning import DEFAULT_SOURCES, WebCollector
 from .updater import UpgradeResult, restore_backup
 
 
@@ -47,15 +46,6 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--recent", type=int, default=10)
     report_parser.add_argument(
         "--json", action="store_true", help="Emit machine-readable report JSON."
-    )
-    web_parser = subparsers.add_parser(
-        "collect-web",
-        help="Collect bounded documentation samples for review.",
-    )
-    web_parser.add_argument(
-        "--source",
-        action="append",
-        help="Allowed documentation URL; defaults to Python, MDN, and PyTorch.",
     )
     service_parser = subparsers.add_parser(
         "service",
@@ -166,17 +156,6 @@ def main(argv: list[str] | None = None) -> int:
                 else remove_service()
             )
             print(f"Service {args.action}ed: {path}")
-            return 0
-
-        if args.command == "collect-web":
-            sources = tuple(args.source) if args.source else None
-            count = WebCollector(agent.settings.web_pending_path).collect(
-                sources or DEFAULT_SOURCES
-            )
-            print(
-                f"Collected {count} sample(s) for review at "
-                f"{agent.settings.web_pending_path}"
-            )
             return 0
 
         if args.command == "chat":
