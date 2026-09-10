@@ -27,6 +27,9 @@ def identity_response(prompt: str) -> str | None:
 
 from lusas_ai.identity import CREATOR_QUESTION, IDENTITY_RESPONSE
 
+# Backward-compatible name for existing local identity tests.
+identity_response = IDENTITY_RESPONSE
+
 
 MODEL_SYSTEM_PROMPT = (
     "You are LUSAS AI, also known as Lusa. If asked about your creator, "
