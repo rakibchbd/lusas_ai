@@ -22,7 +22,6 @@ import time
 from typing import Any, Callable, Mapping, Protocol
 
 from .config import Settings
-from .git_integration import GitCommitResult, GitIntegration
 from .notifications import notify
 from .updater import (
     apply_candidate,
@@ -507,7 +506,6 @@ class EvolutionResult:
     reason: str | None = None
     files: tuple[str, ...] = field(default_factory=tuple)
     diff_path: Path | None = None
-    git_commit: str | None = None
     deployment: str = "none"
 
 
@@ -525,7 +523,6 @@ class EvolutionOrchestrator:
         self.validator = ProtectedPathValidator()
         self.history = AuditHistory(settings)
         self.deployer = DeploymentHooks()
-        self.git = GitIntegration()
         self.progress_callback = progress_callback
 
     def run(
@@ -591,54 +588,16 @@ class EvolutionOrchestrator:
                 )
             backup = None
             deployed = False
-            git_result = GitCommitResult(False, error="not requested")
             deployment = "none"
             if apply or self.settings.auto_apply_upgrades:
                 progress.emit("deployment", "Applying validated candidate")
                 backup = self.deployer.deploy(self.settings, candidate)
                 deployed = True
                 deployment = "applied"
-                if self.settings.git_commit_upgrades:
-                    progress.emit("git", "Creating local Git commit")
-                    git_result = self.git.commit_applied(
-                        self.settings.root, sorted(changes), summary
-                    )
-                    if not git_result.committed:
-                        reason = f"local Git commit failed: {git_result.error}"
-                        self.deployer.rollback(
-                            self.settings, backup, changed_files=tuple(changes)
-                        )
-                        deployment = "rolled_back"
-                        self.history.append(
-                            status="rejected",
-                            reason=reason,
-                            goal=goal,
-                            summary=summary,
-                            files=sorted(changes),
-                            diff=diff,
-                            diff_path=str(diff_path),
-                            metrics=metrics.__dict__,
-                            deployment=deployment,
-                            git_commit=None,
-                        )
-                        progress.emit("complete", reason, "rejected")
-                        notify(
-                            self.settings.root,
-                            self.settings.notification_path,
-                            "Evolution candidate rolled back after Git failure.",
-                            reason=reason,
-                            diff_path=str(diff_path),
-                        )
-                        return EvolutionResult(
-                            "rejected", summary, candidate.path, backup, metrics,
-                            reason, tuple(sorted(changes)), diff_path, None, deployment
-                        )
-                elif not git_result.committed:
-                    git_result = GitCommitResult(False, error="Git commits disabled")
             version = next_version(self.settings.upgrade_state_path) if deployed else None
             progress.emit(
                 "history", "Recording permanent upgrade history",
-                deployment=deployment, git_commit=git_result.commit,
+                deployment=deployment,
             )
             self.history.append(
                 status="promoted" if deployed else "staged",
@@ -651,15 +610,12 @@ class EvolutionOrchestrator:
                 diff=diff,
                 diff_path=str(diff_path),
                 deployment=deployment,
-                git_commit=git_result.commit,
-                git_commit_enabled=self.settings.git_commit_upgrades,
             )
             notify(
                 self.settings.root, self.settings.notification_path,
                 "Evolution candidate deployed." if deployed else "Evolution candidate staged.",
                 summary=summary, files=sorted(changes), score=metrics.score,
                 version=version, diff_path=str(diff_path),
-                git_commit=git_result.commit,
             )
             progress.emit(
                 "complete",
@@ -669,7 +625,7 @@ class EvolutionOrchestrator:
             return EvolutionResult(
                 "promoted" if deployed else "staged", summary,
                 candidate.path, backup, metrics, files=tuple(sorted(changes)),
-                diff_path=diff_path, git_commit=git_result.commit, deployment=deployment,
+                diff_path=diff_path, deployment=deployment,
             )
         except (EvolutionRejected, OSError, ValueError, RuntimeError) as exc:
             self.history.append(status="rejected", reason=str(exc), goal=goal)

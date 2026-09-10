@@ -27,7 +27,6 @@ class MonitorTests(unittest.TestCase):
                 encoding="utf-8",
             )
             payload = report(settings)
-            self.assertFalse(payload["policy"]["git_commit_upgrades"])
             self.assertEqual(payload["recent_progress"][0]["phase"], "tests")
 
 
