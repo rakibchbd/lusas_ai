@@ -83,6 +83,17 @@ candidate, evaluates it against the regression set, and promotes it only when
 all evaluation cases pass. It never replaces the production model with an
 untested candidate.
 
+Collect additional official documentation samples for review:
+
+~~~text
+python3 -m lusas_ai collect-web
+~~~
+
+The collector is limited to official Python, MDN, and PyTorch documentation,
+checks `robots.txt`, applies a 512 KB response limit and a five-second delay,
+and writes samples to `.lusas/web_pending.jsonl`. Web content is not added to
+training automatically; review it before approving it with `lusas learn`.
+
 When `auto_publish_upgrades` is enabled, a passing upgrade is also recorded in
 the tracked learning history, committed to a new `lusas/upgrade-*` branch,
 pushed to `origin`, and submitted as a pull request with `gh`. It will not
