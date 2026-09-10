@@ -26,12 +26,19 @@ def run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
+def progress(message: str, **details: object) -> None:
+    """Keep long model operations visible in launchd and terminal logs."""
+    suffix = f" {json.dumps(details, ensure_ascii=True)}" if details else ""
+    print(f"[auto-upgrade] {message}{suffix}", flush=True)
+
+
 def run_once(root: Path) -> dict:
     settings = Settings.load(root)
     if not settings.auto_model_upgrades:
         return {"status": "disabled"}
 
     started_at = datetime.now(timezone.utc).isoformat()
+    progress("cycle started")
     data_path = root / ".lusas" / f"training-{run_id()}.jsonl"
     eval_path = root / "training" / "data" / "eval.jsonl"
     records = []
@@ -46,6 +53,7 @@ def run_once(root: Path) -> dict:
     input_fingerprint = fingerprint([base_data_path, settings.learning_path, eval_path])
     cycle_state = read_cycle_state(settings.cycle_state_path)
     if cycle_state.get("input_fingerprint") == input_fingerprint:
+        progress("training inputs unchanged; skipping")
         record(
             settings.upgrade_log_path,
             time=started_at,
@@ -61,11 +69,13 @@ def run_once(root: Path) -> dict:
             "learned_examples": len(records),
         }
     data_path.parent.mkdir(parents=True, exist_ok=True)
+    progress("preparing training data", examples=len(records))
     data_path.write_text(
         "\n".join(json.dumps(record, ensure_ascii=True) for record in records) + "\n",
         encoding="utf-8",
     )
     candidate = root / "models" / "candidates" / f"auto-{run_id()}"
+    progress("training candidate model", candidate=str(candidate))
     train(
         data_path=data_path,
         output_path=candidate,
@@ -73,7 +83,13 @@ def run_once(root: Path) -> dict:
         epochs=1.0,
         max_length=1024,
     )
+    progress("evaluating candidate model")
     report = evaluate(candidate, eval_path, max_new_tokens=128)
+    progress(
+        "candidate evaluation complete",
+        passed=report["passed"],
+        score=report["score"],
+    )
     (candidate / "evaluation.json").write_text(
         json.dumps(report, indent=2) + "\n",
         encoding="utf-8",
@@ -111,6 +127,7 @@ def run_once(root: Path) -> dict:
             )
 
     if report["passed"]:
+        progress("promoting validated model")
         version = next_version(settings.upgrade_state_path)
         backup = promote(candidate, root, evaluation_passed=True)
         notify(
@@ -231,6 +248,7 @@ def main() -> int:
                 "Automatic model upgrade failed before promotion.",
                 error=str(exc),
             )
+            progress("cycle failed", error=str(exc))
             print(f"Automatic upgrade error: {exc}", flush=True)
             if args.once:
                 return 1
