@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .config import Settings
 from .identity import CREATOR_QUESTION, IDENTITY_RESPONSE
@@ -11,7 +11,7 @@ from .local_model import LocalModel
 from .notifications import notify
 from .updater import UpgradeResult, perform_upgrade
 from .workspace import Workspace
-from .evolution import EvolutionOrchestrator, EvolutionResult
+from .evolution import EvolutionOrchestrator, EvolutionResult, ProgressEvent
 
 
 AGENT_SYSTEM_PROMPT = f"""You are LUSAS AI, also called Lusa.
@@ -110,10 +110,17 @@ class LusasAgent:
         _, changes = self.propose_self_upgrade(goal)
         return perform_upgrade(self.settings, changes, goal=goal, apply=apply)
 
-    def evolve(self, goal: str, apply: bool = False) -> EvolutionResult:
+    def evolve(
+        self,
+        goal: str,
+        apply: bool = False,
+        progress_callback: Callable[[ProgressEvent], None] | None = None,
+    ) -> EvolutionResult:
         """Run the guarded production evolution pipeline with the local model."""
-        return EvolutionOrchestrator(self.settings, self.model).run(
-            goal, apply=apply
+        return EvolutionOrchestrator(
+            self.settings, self.model, progress_callback=progress_callback
+        ).run(
+            goal, apply=apply, progress_callback=progress_callback
         )
 
     def learn(self, instruction: str, output: str) -> None:

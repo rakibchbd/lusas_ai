@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -65,6 +66,81 @@ class EvolutionTests(unittest.TestCase):
             self.assertTrue(result.metrics.tests_passed)
             self.assertFalse((root / "lusas_ai" / "value.py").exists())
             self.assertTrue(result.candidate and result.candidate.exists())
+            self.assertTrue(result.diff_path and result.diff_path.exists())
+            history = settings.upgrade_log_path.read_text(encoding="utf-8")
+            self.assertIn('"diff_path"', history)
+            self.assertIn('"metrics"', history)
+
+    def test_progress_callback_and_report_file_are_visible(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "lusas_ai").mkdir()
+            (root / "tests").mkdir()
+            (root / "lusas_ai" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "tests" / "test_value.py").write_text(
+                "import unittest\n"
+                "class ValueTests(unittest.TestCase):\n"
+                "    def test_value(self): self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            events = []
+            model = FakeModel(
+                '{"summary":"add value","files":'
+                '{"lusas_ai/value.py":"VALUE = 2\\n"}}'
+            )
+            settings = Settings(root=root, notify_file=".lusas/events.jsonl")
+            result = EvolutionOrchestrator(settings, model).run(
+                "add value", progress_callback=events.append
+            )
+            self.assertEqual(result.status, "staged")
+            self.assertEqual(events[0].phase, "analysis")
+            self.assertEqual(events[-1].status, "succeeded")
+            self.assertTrue(settings.progress_path.exists())
+
+    def test_applied_candidate_can_opt_in_to_local_git_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "lusas_ai").mkdir()
+            (root / "tests").mkdir()
+            (root / "lusas_ai" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "tests" / "test_value.py").write_text(
+                "import unittest\n"
+                "class ValueTests(unittest.TestCase):\n"
+                "    def test_value(self): self.assertTrue(True)\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.invalid"],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "baseline"], cwd=root, check=True)
+            settings = Settings(
+                root=root,
+                notify_file=".lusas/events.jsonl",
+                git_commit_upgrades=True,
+            )
+            result = EvolutionOrchestrator(
+                settings,
+                FakeModel(
+                    '{"summary":"add value","files":'
+                    '{"lusas_ai/value.py":"VALUE = 2\\n"}}'
+                ),
+            ).run("add value", apply=True)
+
+            self.assertEqual(result.status, "promoted")
+            self.assertTrue(result.git_commit)
+            self.assertEqual(
+                (root / "lusas_ai" / "value.py").read_text(encoding="utf-8"),
+                "VALUE = 2\n",
+            )
+            self.assertIn(result.git_commit, subprocess.run(
+                ["git", "log", "-1", "--format=%H"], cwd=root,
+                text=True, capture_output=True, check=True
+            ).stdout)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,8 @@ Included:
 - model candidate promotion with checkpoint backups
 - staged self-upgrades
 - pre-apply backups
-- tests, rollback-ready artifacts, and notifications
+- tests, rollback-ready artifacts, native desktop notifications, and an
+  inspectable upgrade history
 
 The checked-in configuration enables automatic model evaluation and promotion,
 while source-code evolution is disabled by default. Every model cycle trains a
@@ -102,6 +103,28 @@ push changes manually when you are ready.
 The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle
 still trains and evaluates a candidate before promotion.
+
+Source evolution records a permanent JSONL history entry for every proposal,
+including its unified diff, quality metrics, deployment result, and (when
+enabled) the local Git commit. Diffs are retained under
+`.lusas/upgrade-diffs/`, and progress events are retained in
+`.lusas/evolution-progress.jsonl`. Native notifications use `osascript` on
+macOS, `notify-send` on Linux, and a PowerShell Windows toast when available;
+missing desktop services are reported in the notification log without
+pretending delivery succeeded.
+
+Inspect the local, HTTP-free upgrade dashboard at any time:
+
+~~~text
+python3 -m lusas_ai report
+python3 -m lusas_ai report --json
+~~~
+
+Creating a local Git commit for an applied source upgrade is opt-in and
+remains disabled by default. Set both `evolution_enabled`/the relevant
+application setting and `"git_commit_upgrades": true` in `config.json` to
+enable it. Commits are local only; no GitHub push or pull request is ever
+performed automatically. The `evolve` command prints each gate as it runs.
 
 Run the guarded code-evolution pipeline directly with:
 

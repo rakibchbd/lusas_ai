@@ -26,6 +26,30 @@ def _read_events(path: Path) -> list[dict[str, Any]]:
     return events
 
 
+def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
+    """Return a JSON-serializable, HTTP-free local upgrade dashboard."""
+    upgrades = _read_events(settings.upgrade_log_path)
+    progress = _read_events(settings.progress_path)
+    state = (
+        json.loads(settings.upgrade_state_path.read_text(encoding="utf-8"))
+        if settings.upgrade_state_path.exists()
+        else {"upgrade_count": 0}
+    )
+    return {
+        "policy": {
+            "evolution_enabled": settings.evolution_enabled,
+            "auto_apply_upgrades": settings.auto_apply_upgrades,
+            "auto_code_upgrades": settings.auto_code_upgrades,
+            "git_commit_upgrades": settings.git_commit_upgrades,
+        },
+        "upgrade_count": state.get("upgrade_count", 0),
+        "current_version": f"{int(state.get('upgrade_count', 0)) / 1_000_000:.6f}",
+        "total_history": len(upgrades),
+        "recent_upgrades": upgrades[-recent:],
+        "recent_progress": progress[-recent:],
+    }
+
+
 def snapshot(settings: Settings, recent: int = 10) -> str:
     learned = LearningStore(settings.learning_path).examples()
     events = _read_events(settings.notification_path)
@@ -42,6 +66,7 @@ def snapshot(settings: Settings, recent: int = 10) -> str:
         f"Recorded events: {len(events)}",
         f"Successful upgrades: {state.get('upgrade_count', 0)}",
         f"Current version: {int(state.get('upgrade_count', 0)) / 1_000_000:.6f}",
+        f"Evolution Git commits: {'enabled' if settings.git_commit_upgrades else 'disabled'}",
     ]
     if learned:
         lines.append("\nLearned examples:")
@@ -63,7 +88,18 @@ def snapshot(settings: Settings, recent: int = 10) -> str:
                 f"  {upgrade.get('time', 'unknown time')} "
                 f"version={version} status={upgrade.get('status')} "
                 f"score={upgrade.get('score', '-')}, "
-                f"learned={upgrade.get('learned_examples', 0)}"
+                f"learned={upgrade.get('learned_examples', 0)} "
+                f"deployment={upgrade.get('deployment', '-')} "
+                f"git={upgrade.get('git_commit') or '-'}"
+            )
+    progress = _read_events(settings.progress_path)
+    if progress:
+        lines.append("\nRecent evolution progress:")
+        for event in progress[-recent:]:
+            lines.append(
+                f"  {event.get('time', 'unknown time')} "
+                f"[{event.get('phase', '-')}] {event.get('message', '')} "
+                f"({event.get('status', 'running')})"
             )
     return "\n".join(lines)
 
