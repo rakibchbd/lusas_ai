@@ -20,6 +20,12 @@ class CycleStateTests(unittest.TestCase):
             write(path, {"last_status": "promoted"})
             self.assertEqual(read(path)["last_status"], "promoted")
 
+    def test_state_can_track_learning_count(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "state.json"
+            write(path, {"input_fingerprint": "abc", "learned_examples": 6})
+            self.assertEqual(read(path)["learned_examples"], 6)
+
 
 if __name__ == "__main__":
     unittest.main()
