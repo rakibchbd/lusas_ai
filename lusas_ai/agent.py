@@ -5,12 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import Settings
-from .identity import (
-    CREATOR_QUESTION,
-    GREETING_QUESTION,
-    GREETING_RESPONSE,
-    IDENTITY_RESPONSE,
-)
+from .identity import IDENTITY_RESPONSE, deterministic_response
 from .learning import LearningStore
 from .local_model import LocalModel
 from .notifications import notify
@@ -46,6 +41,17 @@ class ProposalError(ValueError):
     """Raised when the model returns an invalid self-upgrade proposal."""
 
 
+def clean_model_response(response: str) -> str:
+    """Prevent internal prompt and training-format leakage in chat output."""
+    for marker in ("### System:", "System instructions:", "Workspace context:"):
+        if marker in response:
+            response = response.split(marker, 1)[0]
+    if "### Instruction:" in response:
+        response = response.split("### Instruction:", 1)[0]
+    response = response.strip()
+    return response or "I could not produce a clean answer. Please try again."
+
+
 def _parse_json_object(text: str) -> dict[str, Any]:
     start = text.find("{")
     if start < 0:
@@ -76,18 +82,17 @@ class LusasAgent:
         )
 
     def chat(self, prompt: str) -> str:
-        if CREATOR_QUESTION.search(prompt):
-            return IDENTITY_RESPONSE
-        if GREETING_QUESTION.fullmatch(prompt):
-            return GREETING_RESPONSE
+        response = deterministic_response(prompt)
+        if response is not None:
+            return response
         context = self.workspace.snapshot()
-        return self.model.chat(
+        return clean_model_response(self.model.chat(
             (
                 f"System instructions:\n{AGENT_SYSTEM_PROMPT}\n\n"
                 f"Workspace context:\n{context}\n\n"
                 f"User request:\n{prompt}"
             )
-        )
+        ))
 
     def propose_self_upgrade(self, goal: str) -> tuple[str, dict[str, str]]:
         current_source = self._source_snapshot()

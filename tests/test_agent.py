@@ -34,6 +34,13 @@ class AgentIdentityTests(unittest.TestCase):
             agent = LusasAgent(Path(temporary))
             self.assertEqual(agent.chat("hi"), GREETING_RESPONSE)
 
+    def test_common_personal_questions_have_short_answers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            self.assertIn("human age", agent.chat("How old are you?"))
+            self.assertIn("working well", agent.chat("How are you?"))
+            self.assertIn("local AI assistant", agent.chat("What is your profession?"))
+
 
 if __name__ == "__main__":
     unittest.main()

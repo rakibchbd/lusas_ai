@@ -15,10 +15,8 @@ warnings.filterwarnings(
 )
 
 from lusas_ai.identity import (
-    CREATOR_QUESTION,
-    GREETING_QUESTION,
-    GREETING_RESPONSE,
     IDENTITY_RESPONSE,
+    deterministic_response,
 )
 from training.hf_auth import auth_kwargs
 
@@ -77,10 +75,9 @@ def generate_loaded(
     num_ctx: int | None = None,
     seed: int | None = None,
 ) -> str:
-    if CREATOR_QUESTION.search(prompt):
-        return IDENTITY_RESPONSE
-    if GREETING_QUESTION.fullmatch(prompt):
-        return GREETING_RESPONSE
+    response = deterministic_response(prompt)
+    if response is not None:
+        return response
     formatted = (
         f"### System:\n{MODEL_SYSTEM_PROMPT}\n\n"
         "### Instruction:\n"
@@ -110,7 +107,11 @@ def generate_loaded(
     with torch.no_grad():
         output = model.generate(**inputs, **generation_options)
     generated_tokens = output[0][inputs["input_ids"].shape[-1] :]
-    return tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
+    response = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
+    for marker in ("### System:", "System instructions:", "Workspace context:", "### Instruction:"):
+        if marker in response:
+            response = response.split(marker, 1)[0]
+    return response.strip() or "I could not produce a clean answer. Please try again."
 
 
 def generate(model_path: Path, prompt: str, max_new_tokens: int = 128) -> str:

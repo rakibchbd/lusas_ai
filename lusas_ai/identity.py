@@ -4,6 +4,17 @@ import re
 
 
 GREETING_RESPONSE = "Hello! I am LUSAS AI, also known as Lusa. How can I help you?"
+AGE_RESPONSE = (
+    "I do not have a human age. I am a software AI system created by "
+    "Rakib Chowdhury."
+)
+WELLBEING_RESPONSE = (
+    "I am ready and working well. How can I help you?"
+)
+OCCUPATION_RESPONSE = (
+    "I am LUSAS AI, a local AI assistant focused on software development, "
+    "learning, and automation."
+)
 
 
 IDENTITY_RESPONSE = """I am LUSAS AI, developed by Rakib Chowdhury, also known as “Lusa.” Lusa is his childhood nickname, a name used mainly by his family members and people from his village. The name “LUSAS AI” was inspired by this personal nickname.
@@ -31,3 +42,32 @@ GREETING_QUESTION = re.compile(
     r"[!,.?\s]*$",
     re.IGNORECASE,
 )
+
+AGE_QUESTION = re.compile(
+    r"^\s*(?:how\s+old\s+are\s+you|what\s+is\s+your\s+age)\s*[?!.\s]*$",
+    re.IGNORECASE,
+)
+WELLBEING_QUESTION = re.compile(
+    r"^\s*how\s+are\s+you\s*[?!.\s]*$",
+    re.IGNORECASE,
+)
+OCCUPATION_QUESTION = re.compile(
+    r"^\s*(?:what\s+is\s+your\s+(?:occupation|profession|job)|"
+    r"what\s+do\s+you\s+do)\s*[?!.\s]*$",
+    re.IGNORECASE,
+)
+
+
+def deterministic_response(prompt: str) -> str | None:
+    """Answer basic identity and conversation prompts without model leakage."""
+    if CREATOR_QUESTION.search(prompt):
+        return IDENTITY_RESPONSE
+    if GREETING_QUESTION.fullmatch(prompt):
+        return GREETING_RESPONSE
+    if AGE_QUESTION.fullmatch(prompt):
+        return AGE_RESPONSE
+    if WELLBEING_QUESTION.fullmatch(prompt):
+        return WELLBEING_RESPONSE
+    if OCCUPATION_QUESTION.fullmatch(prompt):
+        return OCCUPATION_RESPONSE
+    return None
