@@ -13,6 +13,7 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(settings.evolution_enabled)
         self.assertFalse(settings.auto_code_upgrades)
         self.assertFalse(settings.auto_apply_upgrades)
+        self.assertFalse(settings.git_commit_upgrades)
         self.assertGreaterEqual(settings.model_upgrade_interval_minutes, 1)
 
 

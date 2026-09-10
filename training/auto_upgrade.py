@@ -88,6 +88,9 @@ def run_once(root: Path) -> dict:
                 "testability, or performance improvement. Return no change if "
                 "there is no safe improvement.",
                 apply=settings.auto_apply_upgrades,
+                progress_callback=lambda event: print(
+                    f"[evolve:{event.phase}] {event.message}", flush=True
+                ),
             )
             if result.status in {"promoted", "staged"}:
                 code_upgrade = {

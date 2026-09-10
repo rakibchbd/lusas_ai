@@ -8,6 +8,7 @@
   "auto_apply_upgrades": false,
   "auto_model_upgrades": true,
   "auto_code_upgrades": false,
+  "git_commit_upgrades": false,
   "model_upgrade_interval_minutes": 5,
   "evolution_enabled": false,
   "evolution_interval_minutes": 5,
@@ -15,5 +16,7 @@
   "web_pending_file": ".lusas/web_pending.jsonl",
   "upgrade_log_file": ".lusas/upgrade_log.jsonl",
   "upgrade_state_file": ".lusas/upgrade_state.json",
-  "cycle_state_file": ".lusas/cycle_state.json"
+  "cycle_state_file": ".lusas/cycle_state.json",
+  "upgrade_diff_directory": ".lusas/upgrade-diffs",
+  "progress_file": ".lusas/evolution-progress.jsonl"
 }

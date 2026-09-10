@@ -22,6 +22,7 @@ class Settings:
     auto_apply_upgrades: bool = False
     auto_model_upgrades: bool = True
     auto_code_upgrades: bool = False
+    git_commit_upgrades: bool = False
     model_upgrade_interval_minutes: int = 5
     evolution_enabled: bool = False
     evolution_interval_minutes: int = 5
@@ -30,6 +31,8 @@ class Settings:
     upgrade_log_file: str = ".lusas/upgrade_log.jsonl"
     upgrade_state_file: str = ".lusas/upgrade_state.json"
     cycle_state_file: str = ".lusas/cycle_state.json"
+    upgrade_diff_directory: str = ".lusas/upgrade-diffs"
+    progress_file: str = ".lusas/evolution-progress.jsonl"
 
     @property
     def workspace_root(self) -> Path:
@@ -76,6 +79,9 @@ class Settings:
             auto_code_upgrades=bool(
                 payload.get("auto_code_upgrades", cls.auto_code_upgrades)
             ),
+            git_commit_upgrades=bool(
+                payload.get("git_commit_upgrades", cls.git_commit_upgrades)
+            ),
             model_upgrade_interval_minutes=int(
                 payload.get(
                     "model_upgrade_interval_minutes",
@@ -103,6 +109,10 @@ class Settings:
             cycle_state_file=str(
                 payload.get("cycle_state_file", cls.cycle_state_file)
             ),
+            upgrade_diff_directory=str(
+                payload.get("upgrade_diff_directory", cls.upgrade_diff_directory)
+            ),
+            progress_file=str(payload.get("progress_file", cls.progress_file)),
         )
 
     @property
@@ -128,3 +138,11 @@ class Settings:
     @property
     def cycle_state_path(self) -> Path:
         return (self.root / self.cycle_state_file).resolve()
+
+    @property
+    def upgrade_diff_root(self) -> Path:
+        return (self.root / self.upgrade_diff_directory).resolve()
+
+    @property
+    def progress_path(self) -> Path:
+        return (self.root / self.progress_file).resolve()

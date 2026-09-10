@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import difflib
 import hashlib
 import json
 from pathlib import Path
@@ -18,9 +19,10 @@ import shutil
 import subprocess
 import sys
 import time
-from typing import Any, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol
 
 from .config import Settings
+from .git_integration import GitCommitResult, GitIntegration
 from .notifications import notify
 from .updater import (
     apply_candidate,
@@ -376,6 +378,96 @@ class AuditHistory:
         record(self.settings.upgrade_log_path, time=datetime.now(timezone.utc).isoformat(), **event)
 
 
+@dataclass(frozen=True)
+class ProgressEvent:
+    phase: str
+    message: str
+    status: str = "running"
+    details: Mapping[str, Any] = field(default_factory=dict)
+    time: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class ProgressReporter:
+    """Persist progress for dashboards and optionally stream it to a caller."""
+
+    def __init__(
+        self,
+        settings: Settings,
+        callback: Callable[[ProgressEvent], None] | None = None,
+    ):
+        self.settings = settings
+        self.callback = callback
+
+    def emit(
+        self, phase: str, message: str, status: str = "running", **details: Any
+    ) -> ProgressEvent:
+        event = ProgressEvent(phase, message, status, details)
+        try:
+            self.settings.progress_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.settings.progress_path.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(
+                        {
+                            "time": event.time,
+                            "phase": event.phase,
+                            "message": event.message,
+                            "status": event.status,
+                            "details": dict(event.details),
+                        },
+                        ensure_ascii=True,
+                    )
+                    + "\n"
+                )
+        except OSError:
+            # Progress must never turn a safe candidate into a failed upgrade.
+            pass
+        if self.callback:
+            try:
+                self.callback(event)
+            except Exception:
+                # A terminal/dashboard consumer is observational only.
+                pass
+        return event
+
+
+def capture_diff(
+    root: Path, candidate: CandidateWorkspace, files: Mapping[str, str] | tuple[str, ...]
+) -> str:
+    """Capture a deterministic unified diff before a candidate is deployed."""
+    diff: list[str] = []
+    for relative in sorted(files):
+        before_path = root / relative
+        after_path = candidate.path / relative
+        before = (
+            before_path.read_text(encoding="utf-8", errors="replace").splitlines(True)
+            if before_path.exists()
+            else []
+        )
+        after = (
+            after_path.read_text(encoding="utf-8", errors="replace").splitlines(True)
+            if after_path.exists()
+            else []
+        )
+        diff.extend(
+            difflib.unified_diff(
+                before,
+                after,
+                fromfile=f"a/{relative}",
+                tofile=f"b/{relative}",
+                lineterm="\n",
+            )
+        )
+    return "".join(diff)
+
+
+def persist_diff(settings: Settings, diff: str) -> Path:
+    digest = hashlib.sha256(diff.encode("utf-8")).hexdigest()[:16]
+    path = settings.upgrade_diff_root / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{digest}.patch"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(diff, encoding="utf-8")
+    return path
+
+
 class DeploymentHooks:
     """Apply only a validated candidate and expose an explicit rollback hook."""
 
@@ -389,8 +481,20 @@ class DeploymentHooks:
             raise
         return backup
 
-    def rollback(self, settings: Settings, backup: Path) -> None:
+    def rollback(
+        self,
+        settings: Settings,
+        backup: Path,
+        changed_files: tuple[str, ...] = (),
+    ) -> None:
         restore_backup(settings.root, backup)
+        manifest_path = backup / "manifest.json"
+        backed_up = set()
+        if manifest_path.exists():
+            backed_up = set(json.loads(manifest_path.read_text(encoding="utf-8")).get("files", ()))
+        for relative in changed_files:
+            if relative not in backed_up:
+                (settings.root / relative).unlink(missing_ok=True)
 
 
 @dataclass(frozen=True)
@@ -402,39 +506,84 @@ class EvolutionResult:
     metrics: QualityMetrics | None = None
     reason: str | None = None
     files: tuple[str, ...] = field(default_factory=tuple)
+    diff_path: Path | None = None
+    git_commit: str | None = None
+    deployment: str = "none"
 
 
 class EvolutionOrchestrator:
     """Coordinate analysis, generation, gates, comparison, and deployment."""
 
-    def __init__(self, settings: Settings, model: ModelBackend):
+    def __init__(
+        self,
+        settings: Settings,
+        model: ModelBackend,
+        progress_callback: Callable[[ProgressEvent], None] | None = None,
+    ):
         self.settings = settings
         self.model = model
         self.validator = ProtectedPathValidator()
         self.history = AuditHistory(settings)
         self.deployer = DeploymentHooks()
+        self.git = GitIntegration()
+        self.progress_callback = progress_callback
 
-    def run(self, goal: str, apply: bool = False) -> EvolutionResult:
+    def run(
+        self,
+        goal: str,
+        apply: bool = False,
+        progress_callback: Callable[[ProgressEvent], None] | None = None,
+    ) -> EvolutionResult:
+        progress = ProgressReporter(
+            self.settings, progress_callback or self.progress_callback
+        )
         analyzer = RepositoryAnalyzer(self.settings.root)
+        progress.emit("analysis", "Analyzing repository")
         report = analyzer.analyze()
         try:
+            progress.emit("planning", "Asking the local model for a proposal")
             summary, changes = ImprovementPlanner(self.model).plan(
                 report, analyzer.snapshot(), goal
             )
+            progress.emit("validation", "Validating proposed paths", files=sorted(changes))
             self.validator.validate_changes(changes)
             candidate = CandidateWorkspace.create(self.settings.root, changes, self.validator)
+            diff = capture_diff(self.settings.root, candidate, changes)
+            if not diff:
+                reason = "candidate does not change any file"
+                self.history.append(
+                    status="rejected", reason=reason, goal=goal, files=sorted(changes)
+                )
+                progress.emit("complete", reason, "rejected")
+                return EvolutionResult("rejected", summary, candidate.path, reason=reason)
+            diff_path = persist_diff(self.settings, diff)
+            progress.emit("security", "Running static security checks")
             security = SecurityChecker().check(candidate)
+            progress.emit("tests", "Running candidate unit tests")
             runner = TestRunner()
             tests = runner.run(candidate)
+            progress.emit("benchmark", "Measuring candidate test benchmark")
             benchmark = BenchmarkRunner().run(candidate, runner=runner)
             metrics = QualityMetrics.measure(
                 tests, security, len(changes), benchmark=benchmark
             )
             if not metrics.passed:
                 reason = "security checks or unit tests failed"
-                self.history.append(status="rejected", reason=reason, files=sorted(changes))
+                self.history.append(
+                    status="rejected",
+                    reason=reason,
+                    goal=goal,
+                    summary=summary,
+                    files=sorted(changes),
+                    diff=diff,
+                    diff_path=str(diff_path),
+                    metrics=metrics.__dict__,
+                    deployment="none",
+                )
+                progress.emit("complete", reason, "rejected", metrics=metrics.__dict__)
                 return EvolutionResult("rejected", summary, candidate.path, metrics=metrics,
-                                       reason=reason, files=tuple(sorted(changes)))
+                                       reason=reason, files=tuple(sorted(changes)),
+                                       diff_path=diff_path)
             baseline = QualityMetrics(True, True, 0, 1.0)
             if not CandidateComparator().better_or_equal(metrics, baseline):
                 raise EvolutionRejected(
@@ -442,26 +591,89 @@ class EvolutionOrchestrator:
                 )
             backup = None
             deployed = False
+            git_result = GitCommitResult(False, error="not requested")
+            deployment = "none"
             if apply or self.settings.auto_apply_upgrades:
+                progress.emit("deployment", "Applying validated candidate")
                 backup = self.deployer.deploy(self.settings, candidate)
                 deployed = True
+                deployment = "applied"
+                if self.settings.git_commit_upgrades:
+                    progress.emit("git", "Creating local Git commit")
+                    git_result = self.git.commit_applied(
+                        self.settings.root, sorted(changes), summary
+                    )
+                    if not git_result.committed:
+                        reason = f"local Git commit failed: {git_result.error}"
+                        self.deployer.rollback(
+                            self.settings, backup, changed_files=tuple(changes)
+                        )
+                        deployment = "rolled_back"
+                        self.history.append(
+                            status="rejected",
+                            reason=reason,
+                            goal=goal,
+                            summary=summary,
+                            files=sorted(changes),
+                            diff=diff,
+                            diff_path=str(diff_path),
+                            metrics=metrics.__dict__,
+                            deployment=deployment,
+                            git_commit=None,
+                        )
+                        progress.emit("complete", reason, "rejected")
+                        notify(
+                            self.settings.root,
+                            self.settings.notification_path,
+                            "Evolution candidate rolled back after Git failure.",
+                            reason=reason,
+                            diff_path=str(diff_path),
+                        )
+                        return EvolutionResult(
+                            "rejected", summary, candidate.path, backup, metrics,
+                            reason, tuple(sorted(changes)), diff_path, None, deployment
+                        )
+                elif not git_result.committed:
+                    git_result = GitCommitResult(False, error="Git commits disabled")
             version = next_version(self.settings.upgrade_state_path) if deployed else None
+            progress.emit(
+                "history", "Recording permanent upgrade history",
+                deployment=deployment, git_commit=git_result.commit,
+            )
             self.history.append(
                 status="promoted" if deployed else "staged",
                 version=version,
                 summary=summary,
+                goal=goal,
                 files=sorted(changes),
                 score=metrics.score,
+                metrics=metrics.__dict__,
+                diff=diff,
+                diff_path=str(diff_path),
+                deployment=deployment,
+                git_commit=git_result.commit,
+                git_commit_enabled=self.settings.git_commit_upgrades,
             )
             notify(
                 self.settings.root, self.settings.notification_path,
                 "Evolution candidate deployed." if deployed else "Evolution candidate staged.",
                 summary=summary, files=sorted(changes), score=metrics.score,
+                version=version, diff_path=str(diff_path),
+                git_commit=git_result.commit,
             )
-            return EvolutionResult("promoted" if deployed else "staged", summary,
-                                   candidate.path, backup, metrics, files=tuple(sorted(changes)))
+            progress.emit(
+                "complete",
+                "Evolution candidate deployed." if deployed else "Evolution candidate staged.",
+                "succeeded",
+            )
+            return EvolutionResult(
+                "promoted" if deployed else "staged", summary,
+                candidate.path, backup, metrics, files=tuple(sorted(changes)),
+                diff_path=diff_path, git_commit=git_result.commit, deployment=deployment,
+            )
         except (EvolutionRejected, OSError, ValueError, RuntimeError) as exc:
             self.history.append(status="rejected", reason=str(exc), goal=goal)
+            progress.emit("complete", str(exc), "rejected")
             notify(self.settings.root, self.settings.notification_path,
                    "Evolution candidate rejected.", reason=str(exc), goal=goal)
             return EvolutionResult("rejected", reason=str(exc))

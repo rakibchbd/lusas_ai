@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import sys
 
 from .agent import LusasAgent
 from .local_model import LocalModelError
-from .monitor import follow, snapshot
+from .monitor import follow, report, snapshot
 from .service import install_service, remove_service
 from .web_learning import DEFAULT_SOURCES, WebCollector
 from .updater import UpgradeResult, restore_backup
@@ -40,6 +41,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     monitor_parser.add_argument("--interval", type=float, default=1.0)
     monitor_parser.add_argument("--recent", type=int, default=10)
+    report_parser = subparsers.add_parser(
+        "report", help="Show the inspectable local upgrade dashboard."
+    )
+    report_parser.add_argument("--recent", type=int, default=10)
+    report_parser.add_argument(
+        "--json", action="store_true", help="Emit machine-readable report JSON."
+    )
     web_parser = subparsers.add_parser(
         "collect-web",
         help="Collect bounded documentation samples for review.",
@@ -129,6 +137,10 @@ def main(argv: list[str] | None = None) -> int:
                 f"{'enabled' if agent.settings.evolution_enabled else 'disabled'} "
                 f"({agent.settings.evolution_interval_minutes} minute interval)"
             )
+            print(
+                "Local Git commits: "
+                f"{'enabled' if agent.settings.git_commit_upgrades else 'disabled'}"
+            )
             return 0
 
         if args.command == "monitor":
@@ -137,6 +149,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.follow:
                 for update in follow(agent.settings, interval=args.interval):
                     print("\033[2J\033[H" + update, flush=True)
+            else:
+                print(snapshot(agent.settings, recent=args.recent))
+            return 0
+
+        if args.command == "report":
+            if args.recent < 1:
+                raise ValueError("report recent must be at least 1.")
+            payload = report(agent.settings, recent=args.recent)
+            if args.json:
+                print(json.dumps(payload, indent=2, ensure_ascii=True))
             else:
                 print(snapshot(agent.settings, recent=args.recent))
             return 0
@@ -179,7 +201,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if result.tests.passed else 1
 
         if args.command == "evolve":
-            result = agent.evolve(args.goal, apply=args.apply)
+            def show_progress(event: object) -> None:
+                phase = getattr(event, "phase", "evolution")
+                message = getattr(event, "message", "")
+                print(f"[evolve:{phase}] {message}", flush=True)
+
+            result = agent.evolve(
+                args.goal, apply=args.apply, progress_callback=show_progress
+            )
             print(f"Evolution: {result.status}")
             if result.reason:
                 print(f"Reason: {result.reason}")
@@ -187,6 +216,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Candidate: {result.candidate}")
             if result.backup:
                 print(f"Backup: {result.backup}")
+            if result.diff_path:
+                print(f"Diff: {result.diff_path}")
+            if result.git_commit:
+                print(f"Git commit: {result.git_commit}")
             return 0 if result.status in {"staged", "promoted"} else 1
 
         if args.command == "rollback":
