@@ -95,16 +95,19 @@ def generate_loaded(torch, tokenizer, model, device: str, prompt: str, max_new_t
     inputs = {key: value.to(device) for key, value in inputs.items()}
     if seed is not None:
         torch.manual_seed(seed)
-    with torch.no_grad():
-        output = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=temperature > 0,
-            temperature=temperature if temperature > 0 else 1.0,
+    generation_options = {
+        "max_new_tokens": max_new_tokens,
+        "do_sample": temperature > 0,
+        "repetition_penalty": repeat_penalty,
+    }
+    if temperature > 0:
+        generation_options.update(
+            temperature=temperature,
             top_p=top_p,
             top_k=top_k,
-            repetition_penalty=repeat_penalty,
         )
+    with torch.no_grad():
+        output = model.generate(**inputs, **generation_options)
     generated_tokens = output[0][inputs["input_ids"].shape[-1] :]
     return tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
 

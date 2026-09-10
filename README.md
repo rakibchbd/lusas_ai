@@ -83,6 +83,13 @@ candidate, evaluates it against the regression set, and promotes it only when
 all evaluation cases pass. It never replaces the production model with an
 untested candidate.
 
+When `auto_publish_upgrades` is enabled, a passing upgrade is also recorded in
+the tracked learning history, committed to a new `lusas/upgrade-*` branch,
+pushed to `origin`, and submitted as a pull request with `gh`. It will not
+publish if the working tree already contains local changes. Model weight files
+remain local because they are excluded by `.gitignore`; the pull request
+contains the learned data and upgrade history, not large model binaries.
+
 To talk directly with the trained LUSAS model, first prepare and promote a
 candidate, then start the interactive model runner:
 

@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from lusas_ai.config import Settings
 from lusas_ai.notifications import notify
+from lusas_ai.publisher import publish_upgrade
 from training.evaluate_model import evaluate
 from training.model_lifecycle import promote
 from training.train_lora import train
@@ -60,6 +61,14 @@ def run_once(root: Path) -> dict:
 
     if report["passed"]:
         backup = promote(candidate, root, evaluation_passed=True)
+        publication = None
+        if settings.auto_publish_upgrades:
+            publication = publish_upgrade(
+                root,
+                candidate,
+                report["score"],
+                records,
+            )
         notify(
             root,
             settings.notification_path,
@@ -67,6 +76,7 @@ def run_once(root: Path) -> dict:
             candidate=str(candidate),
             backup=str(backup),
             score=report["score"],
+            publication=publication,
         )
         data_path.unlink(missing_ok=True)
         return {
@@ -74,6 +84,7 @@ def run_once(root: Path) -> dict:
             "candidate": str(candidate),
             "backup": str(backup),
             "score": report["score"],
+            "publication": publication,
         }
 
     notify(
