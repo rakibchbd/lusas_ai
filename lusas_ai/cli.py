@@ -5,7 +5,8 @@ from pathlib import Path
 import sys
 
 from .agent import LusasAgent
-from .ollama import OllamaError
+from .local_model import LocalModelError
+from .monitor import follow, snapshot
 from .updater import UpgradeResult, restore_backup
 
 
@@ -26,9 +27,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lusas")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("status", help="Show local configuration.")
+    monitor_parser = subparsers.add_parser(
+        "monitor",
+        help="Inspect learned data and follow learning/upgrade events.",
+    )
+    monitor_parser.add_argument(
+        "--follow",
+        action="store_true",
+        help="Refresh when local learning or notification files change.",
+    )
+    monitor_parser.add_argument("--interval", type=float, default=1.0)
+    monitor_parser.add_argument("--recent", type=int, default=10)
 
     chat_parser = subparsers.add_parser("chat", help="Chat with the local agent.")
     chat_parser.add_argument("prompt", nargs="*", help="One-shot prompt.")
+    learn_parser = subparsers.add_parser(
+        "learn",
+        help="Add an approved instruction and answer to the next training cycle.",
+    )
+    learn_parser.add_argument("--instruction", required=True)
+    learn_parser.add_argument("--output", required=True)
 
     upgrade_parser = subparsers.add_parser(
         "self-upgrade",
@@ -74,8 +92,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "status":
-            print(f"Model:     {agent.settings.model}")
-            print(f"Ollama:    {agent.settings.ollama_url}")
+            print(f"Model:     {agent.settings.local_model_path}")
+            print("Backend:   local LUSAS model")
             print(f"Workspace: {agent.workspace.root}")
             print(
                 "Auto-apply self-upgrades: "
@@ -83,11 +101,26 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
 
+        if args.command == "monitor":
+            if args.interval <= 0 or args.recent < 1:
+                raise ValueError("monitor interval must be positive and recent must be at least 1.")
+            if args.follow:
+                for update in follow(agent.settings, interval=args.interval):
+                    print("\033[2J\033[H" + update, flush=True)
+            else:
+                print(snapshot(agent.settings, recent=args.recent))
+            return 0
+
         if args.command == "chat":
             if args.prompt:
                 print(agent.chat(" ".join(args.prompt)))
             else:
                 _interactive_chat(agent)
+            return 0
+
+        if args.command == "learn":
+            agent.learn(args.instruction, args.output)
+            print(f"Learned example saved to {agent.settings.learning_path}")
             return 0
 
         if args.command == "self-upgrade":
@@ -99,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
             restore_backup(agent.settings.root, args.backup)
             print(f"Restored backup: {args.backup}")
             return 0
-    except (OllamaError, ValueError, OSError) as exc:
+    except (LocalModelError, ValueError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 

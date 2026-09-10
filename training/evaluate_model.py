@@ -29,7 +29,8 @@ def evaluate(model_path: Path, data_path: Path, max_new_tokens: int = 128) -> di
         from transformers import AutoTokenizer
     except ImportError as exc:
         raise RuntimeError(
-            "Model runtime dependencies are missing. Install training/requirements.txt."
+            "Model runtime dependencies are missing. Install them with the same "
+            "Python interpreter: python3 -m pip install -r training/requirements.txt"
         ) from exc
 
     device = "mps" if torch.backends.mps.is_available() else "cpu"

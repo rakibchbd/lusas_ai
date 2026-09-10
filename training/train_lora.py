@@ -56,7 +56,8 @@ def train(
         )
     except ImportError as exc:
         raise RuntimeError(
-            "Training dependencies are missing. Install training/requirements.txt."
+            "Training dependencies are missing. Install them with the same "
+            "Python interpreter: python3 -m pip install -r training/requirements.txt"
         ) from exc
 
     records = load_records(data_path)

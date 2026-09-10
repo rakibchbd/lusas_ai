@@ -7,10 +7,15 @@ runtime around it. The first practical model path is a LUSAS adapter trained
 from an open-weight coding model. It keeps model upgrades versioned, tested,
 and recoverable.
 
+The assistant identifies itself as **Lusa**, created by **Rakib Chowdhury**.
+That identity is enforced in the runtime and included in the training data so
+the model does not fall back to its foundation model's identity.
+
 Included:
 
 - bounded workspace for project files
-- local Ollama chat
+- local LUSAS model chat
+- approved-example learning and automatic retraining
 - local LoRA fine-tuning pipeline for a LUSAS model
 - model candidate promotion with checkpoint backups
 - staged self-upgrades
@@ -29,18 +34,54 @@ continued pretraining later.
 
 ## Quick start
 
-Install Ollama, start it, and pull a coding model:
+Install the local model dependencies and train a LUSAS candidate:
 
 ~~~text
-ollama pull qwen2.5-coder:7b
+python3 -m pip install --upgrade pip
+python3 -m pip install -r training/requirements.txt
+python3 training/train_lora.py \
+  --data training/data/examples.jsonl \
+  --output models/candidates/first
+python3 -m lusas_ai status
 ~~~
 
-Then run:
+Promote a candidate after evaluation, then run:
 
 ~~~text
+python3 training/run_model.py --model models/production --interactive
 python3 -m lusas_ai status
 python3 -m lusas_ai chat
 ~~~
+
+Generation behavior is configurable in `config.json`: `temperature`, `top_p`,
+`top_k`, `repeat_penalty`, `num_ctx`, `num_predict`, and `seed` are available
+for the local model runtime. The defaults favor focused, repeatable coding
+answers.
+
+Teach LUSAS explicitly with approved examples. They are stored locally and
+included in the next automatic training cycle:
+
+~~~text
+python3 -m lusas_ai learn \
+  --instruction "Who made you?" \
+  --output "I am Lusa, created by Rakib Chowdhury."
+~~~
+
+Monitor exactly what LUSAS has learned and when upgrades happen:
+
+~~~text
+python3 -m lusas_ai monitor
+python3 -m lusas_ai monitor --follow
+~~~
+
+The monitor reads `.lusas/learned.jsonl` and `.lusas/notifications.jsonl`,
+shows learned instruction previews, and reports model-upgrade events. Stop live
+monitoring with `Ctrl-C`.
+
+The automatic model loop merges the built-in and learned examples, trains a
+candidate, evaluates it against the regression set, and promotes it only when
+all evaluation cases pass. It never replaces the production model with an
+untested candidate.
 
 To talk directly with the trained LUSAS model, first prepare and promote a
 candidate, then start the interactive model runner:

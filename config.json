@@ -1,6 +1,9 @@
 {
-  "ollama_url": "http://127.0.0.1:11434",
-  "model": "qwen2.5-coder:7b",
+  "model_path": "models/production",
+  "learning_file": ".lusas/learned.jsonl",
+  "num_ctx": 8192,
+  "num_predict": 1024,
+  "seed": 42,
   "workspace": "workspace",
   "auto_apply_upgrades": true,
   "auto_model_upgrades": true,

@@ -3,6 +3,16 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from lusas_ai.identity import CREATOR_QUESTION, IDENTITY_RESPONSE
+
+
+MODEL_SYSTEM_PROMPT = (
+    "You are LUSAS AI, also known as Lusa. If asked about your creator, "
+    "developer, maker, author, or designer, provide the complete official "
+    f"creator biography:\n{IDENTITY_RESPONSE}\n"
+    "Never claim OpenAI or another company created you."
+)
+
 
 def load_model(model_path: Path):
     try:
@@ -11,7 +21,8 @@ def load_model(model_path: Path):
         from transformers import AutoTokenizer
     except ImportError as exc:
         raise RuntimeError(
-            "Model runtime dependencies are missing. Install training/requirements.txt."
+            "Model runtime dependencies are missing. Install them with the same "
+            "Python interpreter: python3 -m pip install -r training/requirements.txt"
         ) from exc
 
     device = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -23,19 +34,47 @@ def load_model(model_path: Path):
     return torch, tokenizer, model, device
 
 
-def generate_loaded(torch, tokenizer, model, device: str, prompt: str, max_new_tokens: int) -> str:
+def generate_loaded(
+    torch,
+    tokenizer,
+    model,
+    device: str,
+    prompt: str,
+    max_new_tokens: int,
+    *,
+    temperature: float = 0.0,
+    top_p: float = 1.0,
+    top_k: int = 50,
+    repeat_penalty: float = 1.0,
+    num_ctx: int | None = None,
+    seed: int | None = None,
+) -> str:
+    if CREATOR_QUESTION.search(prompt):
+        return IDENTITY_RESPONSE
     formatted = (
+        f"### System:\n{MODEL_SYSTEM_PROMPT}\n\n"
         "### Instruction:\n"
         f"{prompt}\n\n"
         "### Response:\n"
     )
-    inputs = tokenizer(formatted, return_tensors="pt")
+    inputs = tokenizer(
+        formatted,
+        return_tensors="pt",
+        truncation=num_ctx is not None,
+        max_length=num_ctx,
+    )
     inputs = {key: value.to(device) for key, value in inputs.items()}
+    if seed is not None:
+        torch.manual_seed(seed)
     with torch.no_grad():
         output = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            do_sample=False,
+            do_sample=temperature > 0,
+            temperature=temperature if temperature > 0 else 1.0,
+            top_p=top_p,
+            top_k=top_k,
+            repetition_penalty=repeat_penalty,
         )
     generated_tokens = output[0][inputs["input_ids"].shape[-1] :]
     return tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()

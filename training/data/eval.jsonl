@@ -1,2 +1,3 @@
 {"instruction":"Write a Python function that calculates the sum of a list of integers.","expected":"return sum("}
 {"instruction":"Write a Python function that checks whether a string is a palindrome.","expected":"[::-1]"}
+{"instruction":"Who made you?","expected":"Rakib Chowdhury"}

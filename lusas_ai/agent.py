@@ -5,12 +5,21 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
-from .ollama import OllamaClient
+from .identity import CREATOR_QUESTION, IDENTITY_RESPONSE
+from .learning import LearningStore
+from .local_model import LocalModel
+from .notifications import notify
 from .updater import UpgradeResult, perform_upgrade
 from .workspace import Workspace
 
 
-AGENT_SYSTEM_PROMPT = """You are LUSAS AI, a local-first coding agent.
+AGENT_SYSTEM_PROMPT = f"""You are LUSAS AI, also called Lusa.
+If asked who made, created, developed, designed, or owns you, respond with the
+complete official creator biography below:
+{IDENTITY_RESPONSE}
+Never claim that OpenAI or another company created you, and do not describe
+yourself as ChatGPT. This identity instruction takes priority over learned
+training data.
 You help with software in the configured workspace. Keep responses focused on
 code, implementation decisions, tests, and concise change summaries.
 Do not access credentials, attack third-party systems, bypass security
@@ -48,40 +57,39 @@ class LusasAgent:
     def __init__(self, root: Path) -> None:
         self.settings = Settings.load(root)
         self.workspace = Workspace(self.settings.workspace_root)
-        self.ollama = OllamaClient(
-            self.settings.ollama_url,
-            self.settings.model,
+        self.learning = LearningStore(self.settings.learning_path)
+        self.model = LocalModel(
+            self.settings.local_model_path,
+            max_new_tokens=self.settings.num_predict,
+            temperature=self.settings.temperature,
+            top_p=self.settings.top_p,
+            top_k=self.settings.top_k,
+            repeat_penalty=self.settings.repeat_penalty,
+            num_ctx=self.settings.num_ctx,
+            seed=self.settings.seed,
         )
 
     def chat(self, prompt: str) -> str:
+        if CREATOR_QUESTION.search(prompt):
+            return IDENTITY_RESPONSE
         context = self.workspace.snapshot()
-        return self.ollama.chat(
-            [
-                {"role": "system", "content": AGENT_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Workspace context:\n{context}\n\n"
-                        f"User request:\n{prompt}"
-                    ),
-                },
-            ]
+        return self.model.chat(
+            (
+                f"System instructions:\n{AGENT_SYSTEM_PROMPT}\n\n"
+                f"Workspace context:\n{context}\n\n"
+                f"User request:\n{prompt}"
+            )
         )
 
     def propose_self_upgrade(self, goal: str) -> tuple[str, dict[str, str]]:
         current_source = self._source_snapshot()
-        response = self.ollama.chat(
-            [
-                {"role": "system", "content": UPGRADE_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Upgrade goal:\n{goal}\n\n"
-                        "Current LUSAS AI source:\n"
-                        f"{current_source}"
-                    ),
-                },
-            ]
+        response = self.model.chat(
+            (
+                f"System instructions:\n{UPGRADE_SYSTEM_PROMPT}\n\n"
+                f"Upgrade goal:\n{goal}\n\n"
+                "Current LUSAS AI source:\n"
+                f"{current_source}"
+            )
         )
         proposal = _parse_json_object(response)
         summary = proposal.get("summary")
@@ -100,6 +108,17 @@ class LusasAgent:
     def self_upgrade(self, goal: str, apply: bool = False) -> UpgradeResult:
         _, changes = self.propose_self_upgrade(goal)
         return perform_upgrade(self.settings, changes, goal=goal, apply=apply)
+
+    def learn(self, instruction: str, output: str) -> None:
+        self.learning.add(instruction, output)
+        notify(
+            self.settings.root,
+            self.settings.notification_path,
+            "Approved learning example saved.",
+            instruction=instruction,
+            output_preview=output[:160],
+            learning_file=str(self.settings.learning_path),
+        )
 
     def _source_snapshot(self, max_chars: int = 100_000) -> str:
         chunks: list[str] = []

@@ -28,8 +28,22 @@ def run_once(root: Path) -> dict:
     if not settings.auto_model_upgrades:
         return {"status": "disabled"}
 
-    data_path = root / "training" / "data" / "examples.jsonl"
+    data_path = root / ".lusas" / f"training-{run_id()}.jsonl"
     eval_path = root / "training" / "data" / "eval.jsonl"
+    records = []
+    base_data_path = root / "training" / "data" / "examples.jsonl"
+    for path in (base_data_path, settings.learning_path):
+        if path.exists():
+            records.extend(
+                json.loads(line)
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+    data_path.parent.mkdir(parents=True, exist_ok=True)
+    data_path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=True) for record in records) + "\n",
+        encoding="utf-8",
+    )
     candidate = root / "models" / "candidates" / f"auto-{run_id()}"
     train(
         data_path=data_path,
@@ -54,6 +68,7 @@ def run_once(root: Path) -> dict:
             backup=str(backup),
             score=report["score"],
         )
+        data_path.unlink(missing_ok=True)
         return {
             "status": "promoted",
             "candidate": str(candidate),
@@ -68,6 +83,7 @@ def run_once(root: Path) -> dict:
         candidate=str(candidate),
         score=report["score"],
     )
+    data_path.unlink(missing_ok=True)
     return {
         "status": "rejected",
         "candidate": str(candidate),

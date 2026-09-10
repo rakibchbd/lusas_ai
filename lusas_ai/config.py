@@ -9,8 +9,15 @@ from typing import Any
 @dataclass(frozen=True)
 class Settings:
     root: Path
-    ollama_url: str = "http://127.0.0.1:11434"
-    model: str = "qwen2.5-coder:7b"
+    model_path: str = "models/production"
+    learning_file: str = ".lusas/learned.jsonl"
+    temperature: float = 0.2
+    top_p: float = 0.9
+    top_k: int = 40
+    repeat_penalty: float = 1.1
+    num_ctx: int = 8192
+    num_predict: int = 1024
+    seed: int | None = 42
     workspace: str = "workspace"
     auto_apply_upgrades: bool = False
     auto_model_upgrades: bool = True
@@ -37,8 +44,21 @@ class Settings:
 
         return cls(
             root=root,
-            ollama_url=str(payload.get("ollama_url", cls.ollama_url)),
-            model=str(payload.get("model", cls.model)),
+            model_path=str(payload.get("model_path", cls.model_path)),
+            learning_file=str(payload.get("learning_file", cls.learning_file)),
+            temperature=float(payload.get("temperature", cls.temperature)),
+            top_p=float(payload.get("top_p", cls.top_p)),
+            top_k=int(payload.get("top_k", cls.top_k)),
+            repeat_penalty=float(
+                payload.get("repeat_penalty", cls.repeat_penalty)
+            ),
+            num_ctx=int(payload.get("num_ctx", cls.num_ctx)),
+            num_predict=int(payload.get("num_predict", cls.num_predict)),
+            seed=(
+                None
+                if payload.get("seed", cls.seed) is None
+                else int(payload.get("seed", cls.seed))
+            ),
             workspace=str(payload.get("workspace", cls.workspace)),
             auto_apply_upgrades=bool(
                 payload.get("auto_apply_upgrades", cls.auto_apply_upgrades)
@@ -54,3 +74,11 @@ class Settings:
             ),
             notify_file=str(payload.get("notify_file", cls.notify_file)),
         )
+
+    @property
+    def local_model_path(self) -> Path:
+        return (self.root / self.model_path).resolve()
+
+    @property
+    def learning_path(self) -> Path:
+        return (self.root / self.learning_file).resolve()
