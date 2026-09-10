@@ -22,10 +22,11 @@ Included:
 - pre-apply backups
 - tests, rollback-ready artifacts, and notifications
 
-The checked-in configuration enables automatic software and model upgrades.
-Every model cycle trains a candidate, evaluates it, backs up the active model,
-and promotes it only when the evaluation passes. Software self-upgrades remain
-bounded to the agent, test, and training source directories.
+The checked-in configuration enables automatic model evaluation and promotion,
+while source-code evolution is disabled by default. Every model cycle trains a
+candidate, evaluates it, backs up the active model, and promotes it only when
+the evaluation passes. Software self-upgrades remain bounded to the agent, test,
+and training source directories and must be explicitly enabled after review.
 
 Training a foundation model from zero requires a large curated dataset and
 substantial accelerator compute. This project starts with a local fine-tuned
@@ -108,8 +109,9 @@ Run the guarded code-evolution pipeline directly with:
 python3 -m lusas_ai evolve --goal "Improve parser reliability" --apply
 ~~~
 
-With `auto_code_upgrades` enabled, each passing model cycle also asks the
-current local LUSAS model to propose a small source-code improvement. The
+With both `evolution_enabled` and `auto_code_upgrades` enabled, each passing
+model cycle also asks the current local LUSAS model to propose a small
+source-code improvement. The
 guarded evolution pipeline analyzes the repository, validates protected paths,
 creates an isolated candidate workspace, runs standard-library AST security
 checks and the full unit-test suite, records quality metrics, and compares
@@ -117,7 +119,8 @@ the candidate before deployment. Invalid, unsafe, or failing proposals are
 rejected and logged without stopping the next cycle. Evolution is local-only:
 it never pushes to GitHub, performs unrestricted crawling, or deploys arbitrary
 code. Candidates are limited to `lusas_ai/`, `tests/`, and `training/`, and
-rollback backups remain available under `.lusas/backups/`.
+rollback backups remain available under `.lusas/backups/`. Validated code
+changes are staged unless `auto_apply_upgrades` is also enabled.
 
 The worker fingerprints its training and evaluation inputs. If nothing changed
 since the previous successful cycle, it records a `skipped` event instead of

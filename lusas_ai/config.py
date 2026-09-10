@@ -21,9 +21,9 @@ class Settings:
     workspace: str = "workspace"
     auto_apply_upgrades: bool = False
     auto_model_upgrades: bool = True
-    auto_code_upgrades: bool = True
+    auto_code_upgrades: bool = False
     model_upgrade_interval_minutes: int = 5
-    evolution_enabled: bool = True
+    evolution_enabled: bool = False
     evolution_interval_minutes: int = 5
     notify_file: str = ".lusas/notifications.jsonl"
     web_pending_file: str = ".lusas/web_pending.jsonl"

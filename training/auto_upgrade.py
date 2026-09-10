@@ -80,14 +80,14 @@ def run_once(root: Path) -> dict:
     )
 
     code_upgrade = {"status": "disabled"}
-    if report["passed"] and settings.auto_code_upgrades:
+    if report["passed"] and settings.evolution_enabled and settings.auto_code_upgrades:
         try:
             agent = LusasAgent(root)
             result = agent.evolve(
                 "Review the LUSAS source for one small, measurable reliability, "
                 "testability, or performance improvement. Return no change if "
                 "there is no safe improvement.",
-                apply=True,
+                apply=settings.auto_apply_upgrades,
             )
             if result.status in {"promoted", "staged"}:
                 code_upgrade = {
