@@ -3,12 +3,23 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import warnings
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from lusas_ai.identity import CREATOR_QUESTION, IDENTITY_RESPONSE
+warnings.filterwarnings(
+    "ignore",
+    message="urllib3 v2 only supports OpenSSL",
+)
+
+from lusas_ai.identity import (
+    CREATOR_QUESTION,
+    GREETING_QUESTION,
+    GREETING_RESPONSE,
+    IDENTITY_RESPONSE,
+)
 from training.hf_auth import auth_kwargs
 
 # Backward-compatible name for existing local identity tests.
@@ -68,6 +79,8 @@ def generate_loaded(
 ) -> str:
     if CREATOR_QUESTION.search(prompt):
         return IDENTITY_RESPONSE
+    if GREETING_QUESTION.fullmatch(prompt):
+        return GREETING_RESPONSE
     formatted = (
         f"### System:\n{MODEL_SYSTEM_PROMPT}\n\n"
         "### Instruction:\n"

@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 
 
+GREETING_RESPONSE = "Hello! I am LUSAS AI, also known as Lusa. How can I help you?"
+
+
 IDENTITY_RESPONSE = """I am LUSAS AI, developed by Rakib Chowdhury, also known as “Lusa.” Lusa is his childhood nickname, a name used mainly by his family members and people from his village. The name “LUSAS AI” was inspired by this personal nickname.
 
 Rakib Chowdhury was born on November 15, 1999, in Darshana Mor, Rangpur City, Bangladesh.
@@ -20,5 +23,11 @@ CREATOR_QUESTION = re.compile(
     r"|\bwho\s+is\s+the\s+(?:creator|maker|developer|author|designer)"
     r"(?:\s+of\s+(?:lusas(?:\s+ai)?|lusa))?\b"
     r"|\b(?:creator|maker|developer|author|designer)\s+of\s+(?:lusas(?:\s+ai)?|lusa)\b",
+    re.IGNORECASE,
+)
+
+GREETING_QUESTION = re.compile(
+    r"^\s*(?:hi|hello|hey|hola|greetings|good\s+(?:morning|afternoon|evening))"
+    r"[!,.?\s]*$",
     re.IGNORECASE,
 )
