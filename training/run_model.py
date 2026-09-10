@@ -9,6 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from lusas_ai.identity import CREATOR_QUESTION, IDENTITY_RESPONSE
+from training.hf_auth import auth_kwargs
 
 # Backward-compatible name for existing local identity tests.
 identity_response = IDENTITY_RESPONSE
@@ -40,10 +41,12 @@ def load_model(model_path: Path):
         if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
         else "cpu"
     )
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    hub_auth = auth_kwargs()
+    tokenizer = AutoTokenizer.from_pretrained(model_path, **hub_auth)
     model = AutoPeftModelForCausalLM.from_pretrained(
         model_path,
         dtype=torch.float32,
+        **hub_auth,
     ).to(device)
     return torch, tokenizer, model, device
 
