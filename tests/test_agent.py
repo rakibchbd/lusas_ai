@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from lusas_ai.agent import LusasAgent
-from lusas_ai.identity import IDENTITY_RESPONSE
+from lusas_ai.identity import GREETING_RESPONSE, IDENTITY_RESPONSE
 
 
 class AgentIdentityTests(unittest.TestCase):
@@ -28,6 +28,11 @@ class AgentIdentityTests(unittest.TestCase):
             response = agent.chat("who the developer is?")
             self.assertEqual(response, IDENTITY_RESPONSE)
             self.assertNotIn("### Instruction:", response)
+
+    def test_greeting_is_conversational_without_model_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            self.assertEqual(agent.chat("hi"), GREETING_RESPONSE)
 
 
 if __name__ == "__main__":

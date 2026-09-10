@@ -5,7 +5,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import Settings
-from .identity import CREATOR_QUESTION, IDENTITY_RESPONSE
+from .identity import (
+    CREATOR_QUESTION,
+    GREETING_QUESTION,
+    GREETING_RESPONSE,
+    IDENTITY_RESPONSE,
+)
 from .learning import LearningStore
 from .local_model import LocalModel
 from .notifications import notify
@@ -73,6 +78,8 @@ class LusasAgent:
     def chat(self, prompt: str) -> str:
         if CREATOR_QUESTION.search(prompt):
             return IDENTITY_RESPONSE
+        if GREETING_QUESTION.fullmatch(prompt):
+            return GREETING_RESPONSE
         context = self.workspace.snapshot()
         return self.model.chat(
             (
