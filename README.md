@@ -1,7 +1,5 @@
 # LUSAS AI
 
-Local-first coding agent with tested self-upgrades.
-
 LUSAS AI is being built as its own local model project, with a small agent
 runtime around it. The first practical model path is a LUSAS adapter trained
 from an open-weight coding model. It keeps model upgrades versioned, tested,
