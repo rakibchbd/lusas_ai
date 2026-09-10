@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from lusas_ai.config import Settings
 from lusas_ai.notifications import notify
 from lusas_ai.publisher import publish_upgrade
+from lusas_ai.upgrade_log import next_version, record
 from training.evaluate_model import evaluate
 from training.model_lifecycle import promote
 from training.train_lora import train
@@ -29,6 +30,7 @@ def run_once(root: Path) -> dict:
     if not settings.auto_model_upgrades:
         return {"status": "disabled"}
 
+    started_at = datetime.now(timezone.utc).isoformat()
     data_path = root / ".lusas" / f"training-{run_id()}.jsonl"
     eval_path = root / "training" / "data" / "eval.jsonl"
     records = []
@@ -60,6 +62,7 @@ def run_once(root: Path) -> dict:
     )
 
     if report["passed"]:
+        version = next_version(settings.upgrade_state_path)
         backup = promote(candidate, root, evaluation_passed=True)
         publication = None
         if settings.auto_publish_upgrades:
@@ -77,6 +80,17 @@ def run_once(root: Path) -> dict:
             backup=str(backup),
             score=report["score"],
             publication=publication,
+            version=version,
+        )
+        record(
+            settings.upgrade_log_path,
+            time=started_at,
+            status="promoted",
+            version=version,
+            candidate=str(candidate),
+            score=report["score"],
+            learned_examples=len(records),
+            publication=publication,
         )
         data_path.unlink(missing_ok=True)
         return {
@@ -93,6 +107,15 @@ def run_once(root: Path) -> dict:
         "Automatic model upgrade failed evaluation; not promoted.",
         candidate=str(candidate),
         score=report["score"],
+    )
+    record(
+        settings.upgrade_log_path,
+        time=started_at,
+        status="rejected",
+        version=None,
+        candidate=str(candidate),
+        score=report["score"],
+        learned_examples=len(records),
     )
     data_path.unlink(missing_ok=True)
     return {

@@ -105,6 +105,17 @@ The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle
 still trains and evaluates a candidate before promotion.
 
+Every successful promotion increments the local LUSAS version by `0.000001`.
+For example, the first successful upgrade is `0.000001`, followed by
+`0.000002`. Rejected candidates do not increment the version, but every attempt
+is recorded with its score and learned-example count.
+
+View versions and upgrade history with:
+
+~~~text
+python3 -m lusas_ai monitor
+~~~
+
 To start the worker automatically when you log in on macOS, install the
 LaunchAgent once:
 

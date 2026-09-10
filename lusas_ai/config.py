@@ -25,6 +25,8 @@ class Settings:
     model_upgrade_interval_minutes: int = 1440
     notify_file: str = ".lusas/notifications.jsonl"
     web_pending_file: str = ".lusas/web_pending.jsonl"
+    upgrade_log_file: str = ".lusas/upgrade_log.jsonl"
+    upgrade_state_file: str = ".lusas/upgrade_state.json"
 
     @property
     def workspace_root(self) -> Path:
@@ -81,6 +83,12 @@ class Settings:
             web_pending_file=str(
                 payload.get("web_pending_file", cls.web_pending_file)
             ),
+            upgrade_log_file=str(
+                payload.get("upgrade_log_file", cls.upgrade_log_file)
+            ),
+            upgrade_state_file=str(
+                payload.get("upgrade_state_file", cls.upgrade_state_file)
+            ),
         )
 
     @property
@@ -94,3 +102,11 @@ class Settings:
     @property
     def web_pending_path(self) -> Path:
         return (self.root / self.web_pending_file).resolve()
+
+    @property
+    def upgrade_log_path(self) -> Path:
+        return (self.root / self.upgrade_log_file).resolve()
+
+    @property
+    def upgrade_state_path(self) -> Path:
+        return (self.root / self.upgrade_state_file).resolve()

@@ -10,5 +10,7 @@
   "auto_publish_upgrades": true,
   "model_upgrade_interval_minutes": 5,
   "notify_file": ".lusas/notifications.jsonl",
-  "web_pending_file": ".lusas/web_pending.jsonl"
+  "web_pending_file": ".lusas/web_pending.jsonl",
+  "upgrade_log_file": ".lusas/upgrade_log.jsonl",
+  "upgrade_state_file": ".lusas/upgrade_state.json"
 }
