@@ -6,10 +6,12 @@ from pathlib import Path
 import sys
 
 from .agent import LusasAgent
+from .dashboard import write as write_dashboard
 from .local_model import LocalModelError
 from .monitor import follow, report, snapshot
-from .service import install_service, remove_service
+from .service import install_service, remove_service, service_state
 from .updater import UpgradeResult, restore_backup
+from .web_learning import refresh as refresh_web
 
 
 def _project_root() -> Path:
@@ -46,6 +48,16 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--recent", type=int, default=10)
     report_parser.add_argument(
         "--json", action="store_true", help="Emit machine-readable report JSON."
+    )
+    subparsers.add_parser(
+        "dashboard", help="Generate the local HTML control dashboard."
+    )
+    web_parser = subparsers.add_parser(
+        "web-refresh",
+        help="Fetch newly published items from configured allowlisted web feeds.",
+    )
+    web_parser.add_argument(
+        "--force", action="store_true", help="Refresh even before the interval."
     )
     service_parser = subparsers.add_parser(
         "service",
@@ -127,6 +139,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"{'enabled' if agent.settings.evolution_enabled else 'disabled'} "
                 f"({agent.settings.evolution_interval_minutes} minute interval)"
             )
+            print(
+                "Web learning: "
+                f"{'enabled' if agent.settings.web_learning_enabled else 'disabled'} "
+                f"({agent.settings.web_refresh_interval_minutes} minute interval)"
+            )
+            print(f"Background worker: {service_state()}")
             return 0
 
         if args.command == "monitor":
@@ -147,6 +165,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(payload, indent=2, ensure_ascii=True))
             else:
                 print(snapshot(agent.settings, recent=args.recent))
+            return 0
+
+        if args.command == "dashboard":
+            print(f"Dashboard written to {write_dashboard(agent.settings)}")
+            return 0
+
+        if args.command == "web-refresh":
+            print(json.dumps(refresh_web(agent.settings, force=args.force), indent=2))
             return 0
 
         if args.command == "service":

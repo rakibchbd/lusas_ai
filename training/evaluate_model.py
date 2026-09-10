@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 from pathlib import Path
 
@@ -32,33 +33,40 @@ def evaluate(model_path: Path, data_path: Path, max_new_tokens: int = 128) -> di
         ) from exc
 
     torch, tokenizer, model, device = load_model(model_path)
-    results = []
-    for case in load_cases(data_path):
-        generated = generate_loaded(
-            torch,
-            tokenizer,
-            model,
-            device,
-            case["instruction"],
-            max_new_tokens,
-        )
-        expected = case["expected"]
-        passed = expected in generated
-        results.append(
-            {
-                "instruction": case["instruction"],
-                "expected": expected,
-                "passed": passed,
-                "output": generated,
-            }
-        )
+    try:
+        results = []
+        for case in load_cases(data_path):
+            generated = generate_loaded(
+                torch,
+                tokenizer,
+                model,
+                device,
+                case["instruction"],
+                max_new_tokens,
+            )
+            expected = case["expected"]
+            passed = expected in generated
+            results.append(
+                {
+                    "instruction": case["instruction"],
+                    "expected": expected,
+                    "passed": passed,
+                    "output": generated,
+                }
+            )
 
-    passed_count = sum(1 for result in results if result["passed"])
-    return {
-        "passed": passed_count == len(results),
-        "score": passed_count / len(results),
-        "cases": results,
-    }
+        passed_count = sum(1 for result in results if result["passed"])
+        return {
+            "passed": passed_count == len(results),
+            "score": passed_count / len(results),
+            "cases": results,
+        }
+    finally:
+        del model
+        del tokenizer
+        gc.collect()
+        if device == "mps":
+            torch.mps.empty_cache()
 
 
 def main() -> int:

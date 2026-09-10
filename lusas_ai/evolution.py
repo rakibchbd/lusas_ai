@@ -15,6 +15,7 @@ import difflib
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,8 @@ from .updater import (
     restore_backup,
 )
 from .upgrade_log import next_version, record
+from .upgrade_log import current_count, format_version
+from .version_registry import append_version
 
 
 ALLOWED_PATHS = ("lusas_ai", "tests", "training")
@@ -295,11 +298,11 @@ class SecurityChecker:
 
 
 class TestRunner:
-    def run(self, candidate: CandidateWorkspace, timeout: int = 300) -> CheckResult:
+    def _run_path(self, path: Path, timeout: int = 300) -> CheckResult:
         command = [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"]
         try:
             completed = subprocess.run(
-                command, cwd=candidate.path, text=True, capture_output=True,
+                command, cwd=path, text=True, capture_output=True,
                 timeout=timeout, check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
@@ -307,12 +310,19 @@ class TestRunner:
         output = (completed.stdout + "\n" + completed.stderr).strip()
         return CheckResult(completed.returncode == 0, output, ("unit-tests",))
 
+    def run(self, candidate: CandidateWorkspace, timeout: int = 300) -> CheckResult:
+        return self._run_path(candidate.path, timeout=timeout)
+
+    def run_root(self, root: Path, timeout: int = 300) -> CheckResult:
+        return self._run_path(root, timeout=timeout)
+
 
 @dataclass(frozen=True)
 class BenchmarkResult:
     passed: bool
     duration_seconds: float
     score: float
+    tests_run: int = 0
 
 
 class BenchmarkRunner:
@@ -322,10 +332,26 @@ class BenchmarkRunner:
         started = time.monotonic()
         result = (runner or TestRunner()).run(candidate)
         duration = time.monotonic() - started
+        tests_match = re.search(r"Ran (\d+) tests?", result.output)
+        tests_run = int(tests_match.group(1)) if tests_match else 0
         return BenchmarkResult(
             passed=result.passed,
             duration_seconds=duration,
-            score=1.0 if result.passed else 0.0,
+            score=(1.0 if result.passed else 0.0) + min(tests_run / 1000, 0.1),
+            tests_run=tests_run,
+        )
+
+    def run_root(self, root: Path, runner: TestRunner | None = None) -> BenchmarkResult:
+        started = time.monotonic()
+        result = (runner or TestRunner()).run_root(root)
+        duration = time.monotonic() - started
+        tests_match = re.search(r"Ran (\d+) tests?", result.output)
+        tests_run = int(tests_match.group(1)) if tests_match else 0
+        return BenchmarkResult(
+            passed=result.passed,
+            duration_seconds=duration,
+            score=(1.0 if result.passed else 0.0) + min(tests_run / 1000, 0.1),
+            tests_run=tests_run,
         )
 
 
@@ -347,13 +373,16 @@ class QualityMetrics:
         baseline: float = 0.0,
         benchmark: BenchmarkResult | None = None,
     ) -> "QualityMetrics":
-        score = 0.0
-        if tests.passed:
-            score += 0.7
-        if security.passed:
-            score += 0.3
         benchmark_passed = benchmark.passed if benchmark else tests.passed
         benchmark_seconds = benchmark.duration_seconds if benchmark else 0.0
+        if benchmark is not None:
+            score = benchmark.score if tests.passed and security.passed else 0.0
+        else:
+            score = 0.0
+            if tests.passed:
+                score += 0.7
+            if security.passed:
+                score += 0.3
         return cls(
             tests.passed, security.passed, changed_files, score,
             benchmark_passed, benchmark_seconds,
@@ -366,7 +395,7 @@ class QualityMetrics:
 
 class CandidateComparator:
     def better_or_equal(self, candidate: QualityMetrics, baseline: QualityMetrics | None = None) -> bool:
-        return candidate.passed and (baseline is None or candidate.score >= baseline.score)
+        return candidate.passed and (baseline is None or candidate.score > baseline.score)
 
 
 class AuditHistory:
@@ -581,10 +610,32 @@ class EvolutionOrchestrator:
                 return EvolutionResult("rejected", summary, candidate.path, metrics=metrics,
                                        reason=reason, files=tuple(sorted(changes)),
                                        diff_path=diff_path)
-            baseline = QualityMetrics(True, True, 0, 1.0)
+            baseline_benchmark = BenchmarkRunner().run_root(self.settings.root)
+            baseline = QualityMetrics(
+                baseline_benchmark.passed,
+                True,
+                0,
+                baseline_benchmark.score,
+                benchmark_passed=baseline_benchmark.passed,
+                benchmark_seconds=baseline_benchmark.duration_seconds,
+            )
             if not CandidateComparator().better_or_equal(metrics, baseline):
-                raise EvolutionRejected(
-                    "Candidate did not meet or improve the baseline quality gates."
+                reason = "Candidate did not demonstrate measurable improvement over the baseline."
+                self.history.append(
+                    status="rejected",
+                    reason=reason,
+                    goal=goal,
+                    summary=summary,
+                    files=sorted(changes),
+                    diff=diff,
+                    diff_path=str(diff_path),
+                    metrics=metrics.__dict__,
+                    deployment="none",
+                )
+                progress.emit("complete", reason, "rejected", metrics=metrics.__dict__)
+                return EvolutionResult(
+                    "rejected", summary, candidate.path, metrics=metrics,
+                    reason=reason, files=tuple(sorted(changes)), diff_path=diff_path,
                 )
             backup = None
             deployed = False
@@ -594,7 +645,31 @@ class EvolutionOrchestrator:
                 backup = self.deployer.deploy(self.settings, candidate)
                 deployed = True
                 deployment = "applied"
+            parent_version = format_version(current_count(self.settings.upgrade_state_path))
             version = next_version(self.settings.upgrade_state_path) if deployed else None
+            if deployed and version is not None:
+                append_version(
+                    self.settings.root / ".lusas" / "versions.jsonl",
+                    version=version,
+                    parent_version=parent_version if parent_version != "v0.000" else None,
+                    status="DEPLOYED",
+                    deployment_status="deployed",
+                    changes=sorted(changes),
+                    reason=goal,
+                    problems_fixed=[],
+                    new_capabilities=[],
+                    knowledge_changes={},
+                    prompt_changes=[],
+                    tool_changes=[],
+                    code_changes=sorted(changes),
+                    test_results={"passed": tests.passed},
+                    benchmark_results=benchmark.__dict__,
+                    security_results={"passed": security.passed},
+                    performance_results={"benchmark_seconds": benchmark.duration_seconds},
+                    score_before=baseline.score,
+                    score_after=metrics.score,
+                    rollback_point=str(backup) if backup else None,
+                )
             progress.emit(
                 "history", "Recording permanent upgrade history",
                 deployment=deployment,

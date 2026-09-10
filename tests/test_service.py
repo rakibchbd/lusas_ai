@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 
-from lusas_ai.service import SERVICE_LABEL, build_plist
+from lusas_ai.service import SERVICE_LABEL, build_plist, log_directory
 
 
 class ServiceTests(unittest.TestCase):
@@ -11,6 +11,10 @@ class ServiceTests(unittest.TestCase):
         self.assertTrue(payload["RunAtLoad"])
         self.assertEqual(payload["KeepAlive"], {"NetworkState": True})
         self.assertEqual(payload["ProgramArguments"][0], "/tmp/python")
+        self.assertEqual(
+            payload["StandardOutPath"],
+            str(log_directory() / "auto-upgrade.log"),
+        )
 
 
 if __name__ == "__main__":

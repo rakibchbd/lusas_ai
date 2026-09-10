@@ -8,6 +8,8 @@ from typing import Any
 
 from .config import Settings
 from .learning import LearningStore
+from .upgrade_log import current_count, format_version
+from .version_registry import bootstrap_legacy
 
 
 def _read_events(path: Path) -> list[dict[str, Any]]:
@@ -30,11 +32,10 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
     """Return a JSON-serializable, HTTP-free local upgrade dashboard."""
     upgrades = _read_events(settings.upgrade_log_path)
     progress = _read_events(settings.progress_path)
-    state = (
-        json.loads(settings.upgrade_state_path.read_text(encoding="utf-8"))
-        if settings.upgrade_state_path.exists()
-        else {"upgrade_count": 0}
-    )
+    state = {"upgrade_count": current_count(settings.upgrade_state_path)}
+    versions_path = settings.root / ".lusas" / "versions.jsonl"
+    lessons_path = settings.root / ".lusas" / "lessons.jsonl"
+    regressions_path = settings.root / ".lusas" / "regressions.jsonl"
     return {
         "policy": {
             "evolution_enabled": settings.evolution_enabled,
@@ -42,7 +43,15 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
             "auto_code_upgrades": settings.auto_code_upgrades,
         },
         "upgrade_count": state.get("upgrade_count", 0),
-        "current_version": f"{int(state.get('upgrade_count', 0)) / 1_000_000:.6f}",
+        "current_version": format_version(int(state.get("upgrade_count", 0))),
+        "web_learning": {
+            "enabled": settings.web_learning_enabled,
+            "interval_minutes": settings.web_refresh_interval_minutes,
+            "cached_articles": sum(1 for _ in settings.web_cache_path.read_text(encoding="utf-8").splitlines()) if settings.web_cache_path.exists() else 0,
+        },
+        "versions": bootstrap_legacy(versions_path, upgrades)[-recent:],
+        "lessons_count": len(_read_events(lessons_path)),
+        "regressions_count": len(_read_events(regressions_path)),
         "total_history": len(upgrades),
         "recent_upgrades": upgrades[-recent:],
         "recent_progress": progress[-recent:],
@@ -64,7 +73,8 @@ def snapshot(settings: Settings, recent: int = 10) -> str:
         f"Learned examples: {len(learned)}",
         f"Recorded events: {len(events)}",
         f"Successful upgrades: {state.get('upgrade_count', 0)}",
-        f"Current version: {int(state.get('upgrade_count', 0)) / 1_000_000:.6f}",
+        f"Current version: {format_version(int(state.get('upgrade_count', 0)))}",
+        f"Web articles cached: {settings.web_cache_path.read_text(encoding='utf-8').count(chr(10)) if settings.web_cache_path.exists() else 0}",
     ]
     if learned:
         lines.append("\nLearned examples:")

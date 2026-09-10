@@ -16,5 +16,16 @@
   "upgrade_state_file": ".lusas/upgrade_state.json",
   "cycle_state_file": ".lusas/cycle_state.json",
   "upgrade_diff_directory": ".lusas/upgrade-diffs",
-  "progress_file": ".lusas/evolution-progress.jsonl"
+  "progress_file": ".lusas/evolution-progress.jsonl",
+  "web_learning_enabled": true,
+  "web_refresh_interval_minutes": 60,
+  "web_sources": [
+    "https://github.com/python/cpython/releases.atom",
+    "https://github.com/huggingface/transformers/releases.atom"
+  ],
+  "web_allowed_domains": ["github.com"],
+  "web_max_items": 100,
+  "web_cache_file": ".lusas/web_articles.jsonl",
+  "web_training_file": ".lusas/web_training.jsonl",
+  "web_state_file": ".lusas/web_state.json"
 }

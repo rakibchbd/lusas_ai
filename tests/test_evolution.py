@@ -91,9 +91,9 @@ class EvolutionTests(unittest.TestCase):
             result = EvolutionOrchestrator(settings, model).run(
                 "add value", progress_callback=events.append
             )
-            self.assertEqual(result.status, "staged")
+            self.assertEqual(result.status, "rejected")
             self.assertEqual(events[0].phase, "analysis")
-            self.assertEqual(events[-1].status, "succeeded")
+            self.assertEqual(events[-1].status, "rejected")
             self.assertTrue(settings.progress_path.exists())
 
 if __name__ == "__main__":

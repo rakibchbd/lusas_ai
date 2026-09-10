@@ -52,9 +52,10 @@ def load_model(model_path: Path):
     )
     hub_auth = auth_kwargs()
     tokenizer = AutoTokenizer.from_pretrained(model_path, **hub_auth)
+    model_dtype = torch.float16 if device in {"cuda", "mps"} else torch.float32
     model = AutoPeftModelForCausalLM.from_pretrained(
         model_path,
-        dtype=torch.float32,
+        dtype=model_dtype,
         **hub_auth,
     ).to(device)
     return torch, tokenizer, model, device

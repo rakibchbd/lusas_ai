@@ -20,6 +20,7 @@ class AgentIdentityTests(unittest.TestCase):
             agent = LusasAgent(Path(temporary))
             response = agent.chat("Who is your developer?")
             self.assertEqual(response, IDENTITY_RESPONSE)
+            self.assertIn("Lusa Chowdhury (Rakib)", response)
             self.assertIn("Systems Engineer", response)
 
     def test_indirect_creator_question_returns_one_biography(self) -> None:

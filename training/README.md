@@ -52,9 +52,11 @@ excluded from Git by the root ignore file.
 
 ## Automatic upgrades
 
-The project config enables automatic model upgrades every 24 hours. Each cycle
-trains a candidate, evaluates it, backs up the active model, and promotes it
-only if the evaluation passes:
+The project config enables automatic model and allowlisted web-learning cycles
+every five minutes. Each cycle refreshes the configured HTTPS feeds, trains a
+candidate when new data arrives, evaluates it, backs up the active model, and
+promotes it only if the candidate passes and scores better than the current
+production model:
 
 ~~~text
 python3 training/auto_upgrade.py

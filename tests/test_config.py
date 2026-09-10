@@ -1,4 +1,6 @@
 from pathlib import Path
+import json
+import tempfile
 import unittest
 
 from lusas_ai.config import Settings
@@ -14,6 +16,26 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(settings.auto_code_upgrades)
         self.assertTrue(settings.auto_apply_upgrades)
         self.assertGreaterEqual(settings.model_upgrade_interval_minutes, 1)
+
+    def test_config_paths_cannot_escape_project_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "config.json").write_text(
+                json.dumps(
+                    {
+                        "learning_file": "../outside.json",
+                        "workspace": "/tmp/outside",
+                        "model_upgrade_interval_minutes": -4,
+                        "web_max_items": 0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = Settings.load(root)
+            self.assertEqual(settings.learning_file, ".lusas/learned.jsonl")
+            self.assertEqual(settings.workspace, "workspace")
+            self.assertEqual(settings.model_upgrade_interval_minutes, 1)
+            self.assertEqual(settings.web_max_items, 1)
 
 
 if __name__ == "__main__":

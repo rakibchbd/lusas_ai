@@ -13,7 +13,7 @@ Included:
 
 - bounded workspace for project files
 - local LUSAS model chat
-- approved-example learning and automatic retraining
+- approved-example and allowlisted web learning with automatic retraining
 - local LoRA fine-tuning pipeline for a LUSAS model
 - model candidate promotion with checkpoint backups
 - staged self-upgrades
@@ -21,11 +21,11 @@ Included:
 - tests, rollback-ready artifacts, native desktop notifications, and an
   inspectable upgrade history
 
-The checked-in configuration enables automatic model evaluation and promotion,
-while source-code evolution is disabled by default. Every model cycle trains a
-candidate, evaluates it, backs up the active model, and promotes it only when
-the evaluation passes. Software self-upgrades remain bounded to the agent, test,
-and training source directories and must be explicitly enabled after review.
+The checked-in configuration enables automatic model evaluation, promotion, and
+guarded source evolution. Every model cycle trains a candidate, evaluates it,
+backs up the active model, and promotes it only when the evaluation passes.
+Software self-upgrades remain bounded to the agent, test, and training source
+directories and are subject to static security checks and the full test suite.
 
 Training a foundation model from zero requires a large curated dataset and
 substantial accelerator compute. This project starts with a local fine-tuned
@@ -93,18 +93,30 @@ candidate, evaluates it against the regression set, and promotes it only when
 all evaluation cases pass. It never replaces the production model with an
 untested candidate.
 
-LUSAS answers entirely from its local model, approved local training data, and
-configured local workspace. Chat never calls a web API or external answer
-service. Hugging Face is used only to download model files during setup or
-training; inference itself runs locally.
+LUSAS answers from its local model, approved local training data, configured
+local workspace, and optionally cached excerpts from explicitly allowlisted
+HTTPS feeds. The web collector runs on a schedule, stores only bounded text
+locally, and never executes downloaded content or sends prompts, credentials,
+or workspace files to a website. Hugging Face is used only to download model
+files during setup or training; inference itself runs locally.
 
-Upgrades remain completely local by design. The model, source changes, learned
-records, version state, and logs use only the local filesystem. No external
-answer API, GitHub account, remote, push, pull request, or repository
-connection is used.
+The default web sources are official release feeds for CPython and
+Hugging Face Transformers. Change `web_sources` and
+`web_allowed_domains` together in `config.json` to use other HTTPS feeds.
+Trigger a refresh manually with:
+
+~~~text
+python3 -m lusas_ai web-refresh --force
+~~~
+
+Upgrades remain local by design. The model, source changes, learned records,
+version state, and logs use the local filesystem. Web learning only reads the
+explicitly configured feeds; it does not publish to GitHub or use an external
+answer API, and it never sends prompts, credentials, or workspace files.
 
 The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle
+refreshes the allowlisted web sources, incorporates new local records, and
 still trains and evaluates a candidate before promotion.
 
 Source evolution records a permanent JSONL history entry for every proposal,
@@ -121,6 +133,17 @@ Inspect the local, HTTP-free upgrade dashboard at any time:
 python3 -m lusas_ai report
 python3 -m lusas_ai report --json
 ~~~
+
+Generate a browsable local HTML control dashboard from the same records:
+
+~~~text
+python3 -m lusas_ai dashboard
+open .lusas/dashboard.html
+~~~
+
+The dashboard shows version, policy, web-learning, lesson, regression, and
+upgrade-history summaries. It does not expose hidden model reasoning or grant
+new permissions.
 
 The `evolve` command prints each gate as it runs. The automatic local worker
 is configured to run model and source-code upgrades every five minutes after
@@ -153,10 +176,10 @@ disabled pinned memory on MPS where it is unsupported. A rejected candidate is
 also recorded as the current input result, so the same failed dataset is not
 retrained every five minutes until new data or evaluation inputs arrive.
 
-Every successful promotion increments the local LUSAS version by `0.000001`.
-For example, the first successful upgrade is `0.000001`, followed by
-`0.000002`. Rejected candidates do not increment the version, but every attempt
-is recorded with its score and learned-example count.
+Every successful promotion increments the local LUSAS version by one patch step:
+`v0.001`, followed by `v0.002`, `v0.003`, and so on. Rejected candidates do not
+increment the version, but every attempt is recorded with its baseline score,
+candidate score, improvement, and learned-example count.
 
 View versions and upgrade history with:
 
@@ -172,8 +195,11 @@ python3 -m lusas_ai service install
 ~~~
 
 It starts at login, restarts after an exit, and uses `launchd`'s network-state
-keep-alive. Logs are written to `.lusas/auto-upgrade.log` and
-`.lusas/auto-upgrade-error.log`. Remove it with:
+keep-alive. Because macOS protects Documents from some background processes,
+the LaunchAgent writes logs to `~/Library/Logs/LUSAS_AI/`. The install command
+verifies that the worker is actually running; if macOS denies access to the
+Documents folder, it reports the failure instead of claiming success. Remove it
+with:
 
 ~~~text
 python3 -m lusas_ai service remove

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 from pathlib import Path
 
@@ -77,16 +78,21 @@ def train(
         )
 
     tokenized = dataset.map(tokenize, batched=True, remove_columns=["text"])
-    if torch.cuda.is_available():
-        dtype = torch.float16
-    else:
-        dtype = torch.float32
     mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
         dtype=dtype,
         **hub_auth,
     )
+    # The model is trained on a laptop-class accelerator.  Disable the KV
+    # cache and checkpoint activations so the worker remains viable as the
+    # dataset grows instead of being killed by macOS memory pressure.
+    model.config.use_cache = False
+    if mps_available or not torch.cuda.is_available():
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        if hasattr(model, "enable_input_require_grads"):
+            model.enable_input_require_grads()
     model = get_peft_model(
         model,
         LoraConfig(
@@ -104,8 +110,8 @@ def train(
         args=TrainingArguments(
             output_dir=str(output_path),
             num_train_epochs=epochs,
-            per_device_train_batch_size=2 if (torch.cuda.is_available() or mps_available) else 1,
-            gradient_accumulation_steps=4 if (torch.cuda.is_available() or mps_available) else 8,
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=8,
             learning_rate=2e-4,
             logging_steps=1,
             save_strategy="epoch",
@@ -113,6 +119,8 @@ def train(
             fp16=torch.cuda.is_available(),
             dataloader_num_workers=0,
             dataloader_pin_memory=torch.cuda.is_available(),
+            optim="adafactor" if (mps_available or not torch.cuda.is_available()) else "adamw_torch",
+            gradient_checkpointing=mps_available or not torch.cuda.is_available(),
         ),
         train_dataset=tokenized,
         processing_class=tokenizer,
@@ -121,9 +129,18 @@ def train(
             mlm=False,
         ),
     )
-    trainer.train()
-    trainer.save_model(str(output_path))
-    tokenizer.save_pretrained(str(output_path))
+    try:
+        trainer.train()
+        trainer.save_model(str(output_path))
+        tokenizer.save_pretrained(str(output_path))
+    finally:
+        # Trainer retains references to the base model and optimizer.  Free
+        # them before the same process loads the candidate for evaluation.
+        del trainer
+        del model
+        gc.collect()
+        if mps_available:
+            torch.mps.empty_cache()
 
 
 def main() -> int:
