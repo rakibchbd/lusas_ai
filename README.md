@@ -111,6 +111,11 @@ proposal is staged in isolation, tested with the full unit-test suite, and
 applied only when tests pass. Invalid, unsafe, or failing proposals are
 rejected and logged without stopping the next cycle.
 
+The worker fingerprints its training and evaluation inputs. If nothing changed
+since the previous successful cycle, it records a `skipped` event instead of
+retraining the same data, making the five-minute schedule faster and reducing
+unnecessary heat, memory use, and model churn.
+
 Every successful promotion increments the local LUSAS version by `0.000001`.
 For example, the first successful upgrade is `0.000001`, followed by
 `0.000002`. Rejected candidates do not increment the version, but every attempt

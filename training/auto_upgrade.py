@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from lusas_ai.config import Settings
 from lusas_ai.agent import LusasAgent, ProposalError
+from lusas_ai.cycle_state import fingerprint, read as read_cycle_state, write as write_cycle_state
 from lusas_ai.notifications import notify
 from lusas_ai.publisher import publish_upgrade
 from lusas_ai.upgrade_log import next_version, record
@@ -43,6 +44,23 @@ def run_once(root: Path) -> dict:
                 for line in path.read_text(encoding="utf-8").splitlines()
                 if line.strip()
             )
+    input_fingerprint = fingerprint([base_data_path, settings.learning_path, eval_path])
+    cycle_state = read_cycle_state(settings.cycle_state_path)
+    if cycle_state.get("input_fingerprint") == input_fingerprint:
+        record(
+            settings.upgrade_log_path,
+            time=started_at,
+            status="skipped",
+            version=None,
+            score=None,
+            learned_examples=len(records),
+            reason="training inputs unchanged",
+        )
+        return {
+            "status": "skipped",
+            "reason": "training inputs unchanged",
+            "learned_examples": len(records),
+        }
     data_path.parent.mkdir(parents=True, exist_ok=True)
     data_path.write_text(
         "\n".join(json.dumps(record, ensure_ascii=True) for record in records) + "\n",
@@ -151,6 +169,14 @@ def run_once(root: Path) -> dict:
         score=report["score"],
         learned_examples=len(records),
         code_upgrade=code_upgrade,
+    )
+    write_cycle_state(
+        settings.cycle_state_path,
+        {
+            "input_fingerprint": input_fingerprint,
+            "version": version,
+            "last_status": "promoted",
+        },
     )
     data_path.unlink(missing_ok=True)
     return {

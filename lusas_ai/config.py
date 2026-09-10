@@ -28,6 +28,7 @@ class Settings:
     web_pending_file: str = ".lusas/web_pending.jsonl"
     upgrade_log_file: str = ".lusas/upgrade_log.jsonl"
     upgrade_state_file: str = ".lusas/upgrade_state.json"
+    cycle_state_file: str = ".lusas/cycle_state.json"
 
     @property
     def workspace_root(self) -> Path:
@@ -93,6 +94,9 @@ class Settings:
             upgrade_state_file=str(
                 payload.get("upgrade_state_file", cls.upgrade_state_file)
             ),
+            cycle_state_file=str(
+                payload.get("cycle_state_file", cls.cycle_state_file)
+            ),
         )
 
     @property
@@ -114,3 +118,7 @@ class Settings:
     @property
     def upgrade_state_path(self) -> Path:
         return (self.root / self.upgrade_state_file).resolve()
+
+    @property
+    def cycle_state_path(self) -> Path:
+        return (self.root / self.cycle_state_file).resolve()
