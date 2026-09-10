@@ -27,6 +27,18 @@ class EvolutionTests(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(EvolutionRejected):
                 validator.validate(path)
 
+    def test_existing_regression_tests_cannot_be_rewritten(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "tests").mkdir()
+            test_path = root / "tests" / "test_existing.py"
+            test_path.write_text("import unittest\n", encoding="utf-8")
+            with self.assertRaises(EvolutionRejected):
+                CandidateWorkspace.create(
+                    root,
+                    {"tests/test_existing.py": "import unittest\n# weakened\n"},
+                )
+
     def test_security_checker_rejects_shell_capable_imports(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -54,7 +66,10 @@ class EvolutionTests(unittest.TestCase):
             )
             model = FakeModel(
                 '{"summary":"improve value","files":'
-                '{"lusas_ai/value.py":"VALUE = 2\\n"}}'
+                '{"lusas_ai/value.py":"VALUE = 2\\n",'
+                '"tests/test_new_value.py":"import unittest\\n\\n'
+                'class NewValueTests(unittest.TestCase):\\n'
+                '    def test_new_value(self): self.assertEqual(2, 2)\\n"}}'
             )
             settings = Settings(root=root, notify_file=".lusas/events.jsonl")
             result = EvolutionOrchestrator(settings, model).run(

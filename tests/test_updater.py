@@ -32,6 +32,18 @@ class UpdaterTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 stage_candidate(root, {"lusas_ai/.git/config": "unsafe"})
 
+    def test_stage_rejects_rewriting_existing_regression_tests(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            test_path = root / "tests" / "test_existing.py"
+            test_path.parent.mkdir()
+            test_path.write_text("import unittest\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                stage_candidate(
+                    root,
+                    {"tests/test_existing.py": "import unittest\n# weakened\n"},
+                )
+
     def test_upgrade_tests_and_applies_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

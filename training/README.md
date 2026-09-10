@@ -52,11 +52,11 @@ excluded from Git by the root ignore file.
 
 ## Automatic upgrades
 
-The project config enables automatic model and allowlisted web-learning cycles
-every five minutes. Each cycle refreshes the configured HTTPS feeds, trains a
-candidate when new data arrives, evaluates it, backs up the active model, and
-promotes it only if the candidate passes and scores better than the current
-production model:
+The project config enables a five-minute model/evolution worker and an
+allowlisted web refresh checked by that worker. Web feeds are refreshed at
+their configured interval, while model training runs only when its inputs
+change. A candidate is evaluated, backed up, and promoted only if it passes
+and scores better than the current production model:
 
 ~~~text
 python3 training/auto_upgrade.py

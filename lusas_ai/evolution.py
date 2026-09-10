@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import difflib
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -176,7 +177,8 @@ class ImprovementPlanner:
 Return ONLY JSON: {"summary":"...", "files":{"lusas_ai/file.py":"complete text"}}.
 Only change files under lusas_ai/, tests/, or training/. Never add network,
 credential, shell, persistence, or deployment behavior. Include complete file
-contents and tests for behavior changes. If there is no safe improvement,
+contents and add a new regression-test file for behavior changes; existing
+regression tests are immutable. If there is no safe improvement,
 return {"summary":"no safe improvement","files":{}}."""
 
     def __init__(self, model: ModelBackend):
@@ -225,6 +227,16 @@ class CandidateWorkspace:
         root = root.expanduser().resolve()
         validator = validator or ProtectedPathValidator()
         validator.validate_changes(changes)
+        for relative, content in changes.items():
+            validated = validator.validate(relative)
+            existing = root / validated
+            if validated.parts[0] == "tests" and existing.is_file():
+                current = existing.read_text(encoding="utf-8")
+                if current != content:
+                    raise EvolutionRejected(
+                        f"Existing regression test is immutable: {relative!r}. "
+                        "Add a new test file instead of weakening the quality gate."
+                    )
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         path = root / ".lusas" / "evolution-candidates" / stamp
         path.mkdir(parents=True, exist_ok=False)
@@ -298,11 +310,40 @@ class SecurityChecker:
 
 
 class TestRunner:
-    def _run_path(self, path: Path, timeout: int = 300) -> CheckResult:
-        command = [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"]
+    def _run_path(
+        self,
+        path: Path,
+        timeout: int = 300,
+        test_root: Path | None = None,
+        test_pattern: str = "test_*.py",
+    ) -> CheckResult:
+        # Always run the immutable tests from the current checkout against the
+        # candidate source. Candidate-provided test edits must not be able to
+        # weaken the quality gate that decides whether production changes are
+        # safe to deploy.
+        test_root = test_root or path / "tests"
+        command = [
+            sys.executable,
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            str(test_root),
+            "-p",
+            test_pattern,
+        ]
+        environment = os.environ.copy()
+        existing_pythonpath = environment.get("PYTHONPATH")
+        environment["PYTHONPATH"] = os.pathsep.join(
+            item for item in (str(path), existing_pythonpath) if item
+        )
         try:
             completed = subprocess.run(
-                command, cwd=path, text=True, capture_output=True,
+                command,
+                cwd=path,
+                env=environment,
+                text=True,
+                capture_output=True,
                 timeout=timeout, check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
@@ -311,7 +352,32 @@ class TestRunner:
         return CheckResult(completed.returncode == 0, output, ("unit-tests",))
 
     def run(self, candidate: CandidateWorkspace, timeout: int = 300) -> CheckResult:
-        return self._run_path(candidate.path, timeout=timeout)
+        baseline = self._run_path(
+            candidate.path,
+            timeout=timeout,
+            test_root=candidate.root / "tests",
+        )
+        results = [baseline]
+        baseline_tests = candidate.root / "tests"
+        candidate_tests = candidate.path / "tests"
+        if candidate_tests.is_dir():
+            for test_path in sorted(candidate_tests.rglob("test_*.py")):
+                relative = test_path.relative_to(candidate_tests)
+                if (baseline_tests / relative).exists():
+                    continue
+                results.append(
+                    self._run_path(
+                        candidate.path,
+                        timeout=timeout,
+                        test_root=test_path.parent,
+                        test_pattern=test_path.name,
+                    )
+                )
+        return CheckResult(
+            all(result.passed for result in results),
+            "\n\n".join(result.output for result in results if result.output),
+            ("unit-tests",),
+        )
 
     def run_root(self, root: Path, timeout: int = 300) -> CheckResult:
         return self._run_path(root, timeout=timeout)
@@ -328,12 +394,15 @@ class BenchmarkResult:
 class BenchmarkRunner:
     """Turn the deterministic unit-test gate into a measurable benchmark."""
 
+    @staticmethod
+    def _tests_run(output: str) -> int:
+        return sum(int(value) for value in re.findall(r"Ran (\d+) tests?", output))
+
     def run(self, candidate: CandidateWorkspace, runner: TestRunner | None = None) -> BenchmarkResult:
         started = time.monotonic()
         result = (runner or TestRunner()).run(candidate)
         duration = time.monotonic() - started
-        tests_match = re.search(r"Ran (\d+) tests?", result.output)
-        tests_run = int(tests_match.group(1)) if tests_match else 0
+        tests_run = self._tests_run(result.output)
         return BenchmarkResult(
             passed=result.passed,
             duration_seconds=duration,
@@ -345,8 +414,7 @@ class BenchmarkRunner:
         started = time.monotonic()
         result = (runner or TestRunner()).run_root(root)
         duration = time.monotonic() - started
-        tests_match = re.search(r"Ran (\d+) tests?", result.output)
-        tests_run = int(tests_match.group(1)) if tests_match else 0
+        tests_run = self._tests_run(result.output)
         return BenchmarkResult(
             passed=result.passed,
             duration_seconds=duration,

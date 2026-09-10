@@ -35,30 +35,85 @@ def progress(message: str, **details: object) -> None:
     print(f"[auto-upgrade] {message}{suffix}", flush=True)
 
 
+def _training_records(root: Path, settings: Settings) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    base_data_path = root / "training" / "data" / "examples.jsonl"
+    for path in (base_data_path, settings.learning_path, settings.web_training_path):
+        if not path.exists():
+            continue
+        for line_number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if not line.strip():
+                continue
+            payload = json.loads(line)
+            if not isinstance(payload, dict):
+                raise ValueError(f"Training record on line {line_number} is not an object.")
+            records.append(payload)
+    return records
+
+
+def _run_code_evolution(root: Path, settings: Settings) -> dict[str, object]:
+    """Run source evolution independently of whether model data changed."""
+    if not settings.evolution_enabled or not settings.auto_code_upgrades:
+        return {"status": "disabled"}
+    try:
+        agent = LusasAgent(root)
+        result = agent.evolve(
+            "Review the LUSAS source for one small, measurable reliability, "
+            "testability, or performance improvement. Return no change if "
+            "there is no safe improvement.",
+            apply=settings.auto_apply_upgrades,
+            progress_callback=lambda event: print(
+                f"[evolve:{event.phase}] {event.message}", flush=True
+            ),
+        )
+        if result.status in {"promoted", "staged"}:
+            return {
+                "status": result.status,
+                "summary": result.summary,
+                "tests_passed": bool(result.metrics and result.metrics.tests_passed),
+                "files": sorted(result.files),
+            }
+        return {"status": result.status, "reason": result.reason}
+    except (ProposalError, ValueError, OSError, RuntimeError) as exc:
+        notify(
+            root,
+            settings.notification_path,
+            "Autonomous code upgrade rejected.",
+            error=str(exc),
+        )
+        return {"status": "rejected", "error": str(exc)}
+
+
+def _interval_due(last_run: object, interval_minutes: int) -> bool:
+    if not isinstance(last_run, str):
+        return True
+    try:
+        elapsed = (
+            datetime.now(timezone.utc) - datetime.fromisoformat(last_run)
+        ).total_seconds()
+    except ValueError:
+        return True
+    return elapsed >= interval_minutes * 60
+
+
 def run_once(root: Path) -> dict:
     settings = Settings.load(root)
-    if not settings.auto_model_upgrades:
+    code_loop_enabled = settings.evolution_enabled and settings.auto_code_upgrades
+    web_loop_enabled = settings.web_learning_enabled
+    if not settings.auto_model_upgrades and not code_loop_enabled and not web_loop_enabled:
         return {"status": "disabled"}
 
     started_at = datetime.now(timezone.utc).isoformat()
     progress("cycle started")
-    web_result = refresh_web(settings)
+    web_result = refresh_web(settings) if settings.web_learning_enabled else {
+        "status": "disabled", "new_items": 0
+    }
     progress("web learning checked", **web_result)
-    data_path = root / ".lusas" / f"training-{run_id()}.jsonl"
-    eval_path = root / "training" / "data" / "eval.jsonl"
-    records = []
+    records = _training_records(root, settings)
     base_data_path = root / "training" / "data" / "examples.jsonl"
-    for path in (
-        base_data_path,
-        settings.learning_path,
-        settings.web_training_path,
-    ):
-        if path.exists():
-            records.extend(
-                json.loads(line)
-                for line in path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            )
+    eval_path = root / "training" / "data" / "eval.jsonl"
     input_fingerprint = fingerprint(
         [
             base_data_path,
@@ -69,277 +124,282 @@ def run_once(root: Path) -> dict:
         ]
     )
     cycle_state = read_cycle_state(settings.cycle_state_path)
-    if (
+    code_due = code_loop_enabled and _interval_due(
+        cycle_state.get("last_code_evolution"), settings.evolution_interval_minutes
+    )
+    inputs_unchanged = (
         cycle_state.get("input_fingerprint") == input_fingerprint
         and cycle_state.get("learned_examples") == len(records)
-    ):
-        progress("training inputs unchanged; skipping")
-        record(
-            settings.upgrade_log_path,
-            time=started_at,
-            status="skipped",
-            version=None,
-            score=None,
-            learned_examples=len(records),
-            web_new_items=web_result.get("new_items", 0),
-            reason="training inputs unchanged",
-        )
-        return {
-            "status": "skipped",
-            "reason": "training inputs unchanged",
-            "learned_examples": len(records),
-            "web_new_items": web_result.get("new_items", 0),
-        }
-    data_path.parent.mkdir(parents=True, exist_ok=True)
-    progress("preparing training data", examples=len(records))
-    data_path.write_text(
-        "\n".join(json.dumps(record, ensure_ascii=True) for record in records) + "\n",
-        encoding="utf-8",
     )
-    candidate = root / "models" / "candidates" / f"auto-{run_id()}"
-    progress("training candidate model", candidate=str(candidate))
-    train(
-        data_path=data_path,
-        output_path=candidate,
-        base_model="Qwen/Qwen2.5-Coder-0.5B-Instruct",
-        epochs=1.0,
-        max_length=512,
-    )
-    progress("evaluating candidate model")
-    report = evaluate(candidate, eval_path, max_new_tokens=128)
-    progress(
-        "candidate evaluation complete",
-        passed=report["passed"],
-        score=report["score"],
-    )
-    baseline_report = None
-    if settings.local_model_path.is_dir():
-        progress("evaluating production baseline")
-        baseline_report = evaluate(settings.local_model_path, eval_path, max_new_tokens=128)
-    baseline_score = baseline_report["score"] if baseline_report else 0.0
-    improvement = report["score"] - baseline_score
-    quality_passed = report["passed"] and (
-        baseline_report is None or improvement > 0
-    )
-    progress(
-        "quality gate complete",
-        passed=quality_passed,
-        baseline_score=baseline_score,
-        candidate_score=report["score"],
-        improvement=improvement,
-    )
-    report["baseline"] = baseline_report
-    report["improvement"] = improvement
-    report["quality_gate_passed"] = quality_passed
-    (candidate / "evaluation.json").write_text(
-        json.dumps(report, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    model_upgrade: dict[str, object] = {"status": "disabled"}
+    data_path: Path | None = None
 
-    code_upgrade = {"status": "disabled"}
-    if quality_passed and settings.evolution_enabled and settings.auto_code_upgrades:
-        try:
-            agent = LusasAgent(root)
-            result = agent.evolve(
-                "Review the LUSAS source for one small, measurable reliability, "
-                "testability, or performance improvement. Return no change if "
-                "there is no safe improvement.",
-                apply=settings.auto_apply_upgrades,
-                progress_callback=lambda event: print(
-                    f"[evolve:{event.phase}] {event.message}", flush=True
-                ),
-            )
-            if result.status in {"promoted", "staged"}:
-                code_upgrade = {
-                    "status": result.status,
-                    "summary": result.summary,
-                    "tests_passed": bool(result.metrics and result.metrics.tests_passed),
-                    "files": sorted(result.files),
-                }
-            else:
-                code_upgrade = {"status": result.status, "reason": result.reason}
-        except (ProposalError, ValueError, OSError, RuntimeError) as exc:
-            code_upgrade = {"status": "rejected", "error": str(exc)}
-            notify(
-                root,
-                settings.notification_path,
-                "Autonomous code upgrade rejected.",
-                error=str(exc),
-            )
-
-    if quality_passed:
-        progress("promoting validated model")
-        backup = promote(candidate, root, evaluation_passed=True)
-        progress("checking deployed model health")
-        deployed_report = evaluate(settings.local_model_path, eval_path, max_new_tokens=128)
-        if not deployed_report["passed"]:
-            restore_backup(backup, root)
-            reason = "post-deploy health check failed; previous model restored"
-            record_failure(
-                root,
-                "post-deploy-model-health",
-                reason,
-                candidate=str(candidate),
-                score=deployed_report["score"],
-            )
-            notify(
-                root,
-                settings.notification_path,
-                "Automatic model upgrade rolled back after deployment health failure.",
-                candidate=str(candidate),
-                backup=str(backup),
-                score=deployed_report["score"],
-            )
+    if settings.auto_model_upgrades:
+        if inputs_unchanged:
+            progress("training inputs unchanged; skipping model training")
             record(
                 settings.upgrade_log_path,
                 time=started_at,
-                status="rolled_back",
+                status="skipped",
                 version=None,
-                candidate=str(candidate),
-                score=deployed_report["score"],
-                baseline_score=baseline_score,
-                improvement=improvement,
+                score=None,
                 learned_examples=len(records),
                 web_new_items=web_result.get("new_items", 0),
-                rollback_point=str(backup),
-                reason=reason,
+                reason="training inputs unchanged",
             )
-            write_cycle_state(
-                settings.cycle_state_path,
-                {
-                    "input_fingerprint": input_fingerprint,
-                    "learned_examples": len(records),
-                    "version": None,
-                    "last_status": "rolled_back",
-                    "candidate_score": report["score"],
+            model_upgrade = {
+                "status": "skipped",
+                "reason": "training inputs unchanged",
+                "learned_examples": len(records),
+            }
+        else:
+            data_path = root / ".lusas" / f"training-{run_id()}.jsonl"
+            data_path.parent.mkdir(parents=True, exist_ok=True)
+            progress("preparing training data", examples=len(records))
+            data_path.write_text(
+                "\n".join(json.dumps(item, ensure_ascii=True) for item in records) + "\n",
+                encoding="utf-8",
+            )
+            candidate = root / "models" / "candidates" / f"auto-{run_id()}"
+            progress("training candidate model", candidate=str(candidate))
+            train(
+                data_path=data_path,
+                output_path=candidate,
+                base_model="Qwen/Qwen2.5-Coder-0.5B-Instruct",
+                epochs=1.0,
+                max_length=512,
+            )
+            progress("evaluating candidate model")
+            report = evaluate(candidate, eval_path, max_new_tokens=128)
+            progress(
+                "candidate evaluation complete",
+                passed=report["passed"],
+                score=report["score"],
+            )
+            baseline_report = None
+            if settings.local_model_path.is_dir():
+                progress("evaluating production baseline")
+                baseline_report = evaluate(
+                    settings.local_model_path, eval_path, max_new_tokens=128
+                )
+            baseline_score = baseline_report["score"] if baseline_report else 0.0
+            improvement = report["score"] - baseline_score
+            quality_passed = report["passed"] and (
+                baseline_report is None or improvement > 0
+            )
+            progress(
+                "quality gate complete",
+                passed=quality_passed,
+                baseline_score=baseline_score,
+                candidate_score=report["score"],
+                improvement=improvement,
+            )
+            report["baseline"] = baseline_report
+            report["improvement"] = improvement
+            report["quality_gate_passed"] = quality_passed
+            (candidate / "evaluation.json").write_text(
+                json.dumps(report, indent=2) + "\n", encoding="utf-8"
+            )
+
+            if quality_passed:
+                progress("promoting validated model")
+                backup = promote(candidate, root, evaluation_passed=True)
+                progress("checking deployed model health")
+                deployed_report = evaluate(
+                    settings.local_model_path, eval_path, max_new_tokens=128
+                )
+                if not deployed_report["passed"]:
+                    restore_backup(backup, root)
+                    reason = "post-deploy health check failed; previous model restored"
+                    record_failure(
+                        root,
+                        "post-deploy-model-health",
+                        reason,
+                        candidate=str(candidate),
+                        score=deployed_report["score"],
+                    )
+                    notify(
+                        root,
+                        settings.notification_path,
+                        "Automatic model upgrade rolled back after deployment health failure.",
+                        candidate=str(candidate),
+                        backup=str(backup),
+                        score=deployed_report["score"],
+                    )
+                    record(
+                        settings.upgrade_log_path,
+                        time=started_at,
+                        status="rolled_back",
+                        version=None,
+                        candidate=str(candidate),
+                        score=deployed_report["score"],
+                        baseline_score=baseline_score,
+                        improvement=improvement,
+                        learned_examples=len(records),
+                        web_new_items=web_result.get("new_items", 0),
+                        rollback_point=str(backup),
+                        reason=reason,
+                    )
+                    model_upgrade = {
+                        "status": "rolled_back",
+                        "candidate": str(candidate),
+                        "backup": str(backup),
+                        "score": deployed_report["score"],
+                        "reason": reason,
+                    }
+                else:
+                    parent_version = format_version(
+                        current_count(settings.upgrade_state_path)
+                    )
+                    version = next_version(settings.upgrade_state_path)
+                    append_version(
+                        root / ".lusas" / "versions.jsonl",
+                        version=version,
+                        parent_version=parent_version if parent_version != "v0.000" else None,
+                        status="DEPLOYED",
+                        deployment_status="deployed",
+                        changes=["trained local LoRA model"],
+                        reason="new training data passed the independent quality gate",
+                        problems_fixed=[],
+                        new_capabilities=["learned training examples"],
+                        knowledge_changes={"web_new_items": web_result.get("new_items", 0)},
+                        prompt_changes=[],
+                        tool_changes=[],
+                        code_changes=[],
+                        test_results=report.get("cases", []),
+                        benchmark_results={
+                            "score_before": baseline_score,
+                            "score_after": report["score"],
+                            "improvement": improvement,
+                        },
+                        security_results={
+                            "passed": True,
+                            "scope": "training data and model adapter",
+                        },
+                        performance_results={"training_records": len(records)},
+                        score_before=baseline_score,
+                        score_after=report["score"],
+                        rollback_point=str(backup),
+                    )
+                    notify(
+                        root,
+                        settings.notification_path,
+                        "Automatic model upgrade tested and promoted.",
+                        candidate=str(candidate),
+                        backup=str(backup),
+                        score=report["score"],
+                        version=version,
+                    )
+                    record(
+                        settings.upgrade_log_path,
+                        time=started_at,
+                        status="promoted",
+                        version=version,
+                        candidate=str(candidate),
+                        score=report["score"],
+                        baseline_score=baseline_score,
+                        improvement=improvement,
+                        learned_examples=len(records),
+                        web_new_items=web_result.get("new_items", 0),
+                    )
+                    model_upgrade = {
+                        "status": "promoted",
+                        "candidate": str(candidate),
+                        "backup": str(backup),
+                        "score": report["score"],
+                        "version": version,
+                    }
+                write_cycle_state(
+                    settings.cycle_state_path,
+                    {
+                        "input_fingerprint": input_fingerprint,
+                        "learned_examples": len(records),
+                        "version": model_upgrade.get("version"),
+                        "last_status": model_upgrade["status"],
+                        "candidate_score": report["score"],
+                        "baseline_score": baseline_score,
+                        "improvement": improvement,
+                    },
+                )
+            else:
+                notify(
+                    root,
+                    settings.notification_path,
+                    "Automatic model upgrade failed the quality gate; not promoted.",
+                    candidate=str(candidate),
+                    score=report["score"],
+                    baseline_score=baseline_score,
+                    improvement=improvement,
+                )
+                record(
+                    settings.upgrade_log_path,
+                    time=started_at,
+                    status="rejected",
+                    version=None,
+                    candidate=str(candidate),
+                    score=report["score"],
+                    baseline_score=baseline_score,
+                    improvement=improvement,
+                    learned_examples=len(records),
+                    web_new_items=web_result.get("new_items", 0),
+                )
+                write_cycle_state(
+                    settings.cycle_state_path,
+                    {
+                        "input_fingerprint": input_fingerprint,
+                        "learned_examples": len(records),
+                        "version": None,
+                        "last_status": "rejected",
+                        "candidate_score": report["score"],
+                        "baseline_score": baseline_score,
+                        "improvement": improvement,
+                    },
+                )
+                model_upgrade = {
+                    "status": "rejected",
+                    "candidate": str(candidate),
+                    "score": report["score"],
                     "baseline_score": baseline_score,
                     "improvement": improvement,
-                },
-            )
+                    "reason": "quality gate did not demonstrate an improvement",
+                }
             data_path.unlink(missing_ok=True)
-            return {
-                "status": "rolled_back",
-                "candidate": str(candidate),
-                "backup": str(backup),
-                "score": deployed_report["score"],
-                "reason": reason,
-            }
-        parent_version = format_version(current_count(settings.upgrade_state_path))
-        version = next_version(settings.upgrade_state_path)
-        append_version(
-            root / ".lusas" / "versions.jsonl",
-            version=version,
-            parent_version=parent_version if parent_version != "v0.000" else None,
-            status="DEPLOYED",
-            deployment_status="deployed",
-            changes=["trained local LoRA model"],
-            reason="new training data passed the independent quality gate",
-            problems_fixed=[],
-            new_capabilities=["learned training examples"],
-            knowledge_changes={"web_new_items": web_result.get("new_items", 0)},
-            prompt_changes=[],
-            tool_changes=[],
-            code_changes=code_upgrade.get("files", []),
-            test_results=report.get("cases", []),
-            benchmark_results={
-                "score_before": baseline_score,
-                "score_after": report["score"],
-                "improvement": improvement,
-            },
-            security_results={"passed": True, "scope": "training data and model adapter"},
-            performance_results={"training_records": len(records)},
-            score_before=baseline_score,
-            score_after=report["score"],
-            rollback_point=str(backup),
-        )
-        notify(
-            root,
-            settings.notification_path,
-            "Automatic model upgrade tested and promoted.",
-            candidate=str(candidate),
-            backup=str(backup),
-            score=report["score"],
-            version=version,
-            code_upgrade=code_upgrade,
-        )
-        record(
-            settings.upgrade_log_path,
-            time=started_at,
-            status="promoted",
-            version=version,
-            candidate=str(candidate),
-            score=report["score"],
-            baseline_score=baseline_score,
-            improvement=improvement,
-            learned_examples=len(records),
-            web_new_items=web_result.get("new_items", 0),
-            code_upgrade=code_upgrade,
-        )
-        write_cycle_state(
-            settings.cycle_state_path,
-            {
-                "input_fingerprint": input_fingerprint,
-                "learned_examples": len(records),
-                "version": version,
-                "last_status": "promoted",
-                "candidate_score": report["score"],
-                "baseline_score": baseline_score,
-                "improvement": improvement,
-            },
-        )
-        data_path.unlink(missing_ok=True)
-        return {
-            "status": "promoted",
-            "candidate": str(candidate),
-            "backup": str(backup),
-            "score": report["score"],
-            "code_upgrade": code_upgrade,
-            "web_new_items": web_result.get("new_items", 0),
-        }
 
-    notify(
-        root,
-        settings.notification_path,
-        "Automatic model upgrade failed the quality gate; not promoted.",
-        candidate=str(candidate),
-        score=report["score"],
-        baseline_score=baseline_score,
-        improvement=improvement,
-    )
-    record(
-        settings.upgrade_log_path,
-        time=started_at,
-        status="rejected",
-        version=None,
-        candidate=str(candidate),
-        score=report["score"],
-        baseline_score=baseline_score,
-        improvement=improvement,
-        learned_examples=len(records),
-        web_new_items=web_result.get("new_items", 0),
-        code_upgrade=code_upgrade,
-    )
-    write_cycle_state(
-        settings.cycle_state_path,
-        {
-            "input_fingerprint": input_fingerprint,
-            "learned_examples": len(records),
-            "version": None,
-            "last_status": "rejected",
-            "candidate_score": report["score"],
-            "baseline_score": baseline_score,
-            "improvement": improvement,
-        },
-    )
-    data_path.unlink(missing_ok=True)
+    if code_due:
+        code_upgrade = _run_code_evolution(root, settings)
+    elif code_loop_enabled:
+        code_upgrade = {
+            "status": "skipped",
+            "reason": "evolution interval not reached",
+        }
+    else:
+        code_upgrade = {"status": "disabled"}
+    if code_due:
+        latest_state = read_cycle_state(settings.cycle_state_path)
+        latest_state.update(
+            {
+                "last_code_evolution": datetime.now(timezone.utc).isoformat(),
+                "last_code_evolution_status": code_upgrade.get("status"),
+            }
+        )
+        write_cycle_state(settings.cycle_state_path, latest_state)
+    model_status = str(model_upgrade.get("status", "disabled"))
+    code_status = str(code_upgrade.get("status", "disabled"))
+    if "promoted" in {model_status, code_status}:
+        status = "promoted"
+    elif "rolled_back" in {model_status, code_status}:
+        status = "rolled_back"
+    elif "rejected" in {model_status, code_status}:
+        status = "rejected"
+    elif model_status == "skipped":
+        status = "skipped"
+    else:
+        status = code_status if code_status != "disabled" else model_status
     return {
-        "status": "rejected",
-        "candidate": str(candidate),
-        "score": report["score"],
-        "baseline_score": baseline_score,
-        "improvement": improvement,
-        "reason": "quality gate did not demonstrate an improvement",
+        "status": status,
+        "model_upgrade": model_upgrade,
         "code_upgrade": code_upgrade,
+        "learned_examples": len(records),
         "web_new_items": web_result.get("new_items", 0),
     }
 
@@ -376,7 +436,14 @@ def main() -> int:
     args = parser.parse_args()
     root = PROJECT_ROOT
     settings = Settings.load(root)
-    interval = args.interval_minutes or settings.model_upgrade_interval_minutes
+    configured_intervals = []
+    if settings.auto_model_upgrades:
+        configured_intervals.append(settings.model_upgrade_interval_minutes)
+    if settings.evolution_enabled and settings.auto_code_upgrades:
+        configured_intervals.append(settings.evolution_interval_minutes)
+    if settings.web_learning_enabled:
+        configured_intervals.append(settings.web_refresh_interval_minutes)
+    interval = args.interval_minutes or min(configured_intervals or [60])
     if interval < 1:
         raise SystemExit("interval-minutes must be at least 1.")
 

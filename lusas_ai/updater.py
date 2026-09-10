@@ -93,6 +93,14 @@ def stage_candidate(root: Path, changes: Mapping[str, str]) -> Path:
         (_validate_relative_path(relative_name), content)
         for relative_name, content in changes.items()
     ]
+    for relative, content in validated_changes:
+        existing = root / relative
+        if relative.parts[0] == "tests" and existing.is_file():
+            if existing.read_text(encoding="utf-8") != content:
+                raise ValueError(
+                    f"Existing regression test is immutable: {relative}. "
+                    "Add a new test file instead of weakening the quality gate."
+                )
     staging_path = root / ".lusas" / "staging" / _run_id()
     staging_path.mkdir(parents=True, exist_ok=False)
 

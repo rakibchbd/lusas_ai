@@ -159,9 +159,10 @@ Run the guarded code-evolution pipeline directly with:
 python3 -m lusas_ai evolve --goal "Improve parser reliability" --apply
 ~~~
 
-With both `evolution_enabled` and `auto_code_upgrades` enabled, each passing
-model cycle also asks the current local LUSAS model to propose a small
-source-code improvement. The
+With both `evolution_enabled` and `auto_code_upgrades` enabled, every scheduled
+worker cycle asks the current local LUSAS model to propose a small source-code
+improvement, even when model training is skipped because its inputs are
+unchanged. The
 guarded evolution pipeline analyzes the repository, validates protected paths,
 creates an isolated candidate workspace, runs standard-library AST security
 checks and the full unit-test suite, records quality metrics, and compares

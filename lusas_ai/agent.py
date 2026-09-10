@@ -34,10 +34,11 @@ Return ONLY one JSON object with this shape:
 {"summary": "short summary", "files": {"lusas_ai/example.py": "complete file text"}}
 
 You may change only files under lusas_ai/, tests/, or training/. Include complete contents
-for every file you change. Preserve the existing CLI behavior unless the goal
-requires changing it. Do not add credential access, exploit code, arbitrary
+for every file you change. Add new regression-test files for behavior changes;
+do not rewrite existing regression tests. Preserve the existing CLI behavior
+unless the goal requires changing it. Do not add credential access, exploit code, arbitrary
 network access, shell execution, persistence outside the project, or security
-bypass behavior. Add or update tests for behavior you change."""
+bypass behavior. Add a new regression-test file for behavior you change."""
 
 
 class ProposalError(ValueError):
