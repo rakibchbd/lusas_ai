@@ -16,7 +16,6 @@ from lusas_ai.config import Settings
 from lusas_ai.agent import LusasAgent, ProposalError
 from lusas_ai.cycle_state import fingerprint, read as read_cycle_state, write as write_cycle_state
 from lusas_ai.notifications import notify
-from lusas_ai.publisher import publish_upgrade
 from lusas_ai.upgrade_log import next_version, record
 from training.evaluate_model import evaluate
 from training.model_lifecycle import promote
@@ -114,14 +113,6 @@ def run_once(root: Path) -> dict:
     if report["passed"]:
         version = next_version(settings.upgrade_state_path)
         backup = promote(candidate, root, evaluation_passed=True)
-        publication = None
-        if settings.auto_publish_upgrades:
-            publication = publish_upgrade(
-                root,
-                candidate,
-                report["score"],
-                records,
-            )
         notify(
             root,
             settings.notification_path,
@@ -129,7 +120,6 @@ def run_once(root: Path) -> dict:
             candidate=str(candidate),
             backup=str(backup),
             score=report["score"],
-            publication=publication,
             version=version,
             code_upgrade=code_upgrade,
         )
@@ -141,7 +131,6 @@ def run_once(root: Path) -> dict:
             candidate=str(candidate),
             score=report["score"],
             learned_examples=len(records),
-            publication=publication,
             code_upgrade=code_upgrade,
         )
         write_cycle_state(
@@ -158,7 +147,6 @@ def run_once(root: Path) -> dict:
             "candidate": str(candidate),
             "backup": str(backup),
             "score": report["score"],
-            "publication": publication,
             "code_upgrade": code_upgrade,
         }
 

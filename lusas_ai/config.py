@@ -21,7 +21,6 @@ class Settings:
     workspace: str = "workspace"
     auto_apply_upgrades: bool = False
     auto_model_upgrades: bool = True
-    auto_publish_upgrades: bool = True
     auto_code_upgrades: bool = True
     model_upgrade_interval_minutes: int = 1440
     notify_file: str = ".lusas/notifications.jsonl"
@@ -71,9 +70,6 @@ class Settings:
             ),
             auto_model_upgrades=bool(
                 payload.get("auto_model_upgrades", cls.auto_model_upgrades)
-            ),
-            auto_publish_upgrades=bool(
-                payload.get("auto_publish_upgrades", cls.auto_publish_upgrades)
             ),
             auto_code_upgrades=bool(
                 payload.get("auto_code_upgrades", cls.auto_code_upgrades)

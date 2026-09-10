@@ -94,12 +94,9 @@ checks `robots.txt`, applies a 512 KB response limit and a five-second delay,
 and writes samples to `.lusas/web_pending.jsonl`. Web content is not added to
 training automatically; review it before approving it with `lusas learn`.
 
-When `auto_publish_upgrades` is enabled, a passing upgrade is also recorded in
-the tracked learning history, committed to a new `lusas/upgrade-*` branch,
-pushed to `origin`, and submitted as a pull request with `gh`. It will not
-publish if the working tree already contains local changes. Model weight files
-remain local because they are excluded by `.gitignore`; the pull request
-contains the learned data and upgrade history, not large model binaries.
+Upgrades remain local by design. The model, source changes, learned records,
+version state, and logs are never pushed automatically to GitHub. Review and
+push changes manually when you are ready.
 
 The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle
