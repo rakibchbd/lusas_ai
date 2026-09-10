@@ -1,6 +1,6 @@
 import unittest
 
-from lusas_ai.identity import GREETING_QUESTION
+from lusas_ai.identity import AGE_QUESTION, GREETING_QUESTION
 
 
 class GreetingTests(unittest.TestCase):
@@ -11,6 +11,9 @@ class GreetingTests(unittest.TestCase):
 
     def test_greeting_pattern_does_not_match_normal_requests(self) -> None:
         self.assertFalse(GREETING_QUESTION.fullmatch("help me write Python"))
+
+    def test_age_pattern_matches_question(self) -> None:
+        self.assertTrue(AGE_QUESTION.fullmatch("How old are you?"))
 
 
 if __name__ == "__main__":
