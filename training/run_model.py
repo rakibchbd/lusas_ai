@@ -2,28 +2,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import re
-
-
-LUSAS_IDENTITY = (
-    "I am LUSAS AI, developed by Lusa Chowdhury (Rakib). "
-    "My current model is based on an open-weight coding model and fine-tuned locally."
-)
-
-
-def identity_response(prompt: str) -> str | None:
-    normalized = re.sub(r"[^a-z0-9 ]+", " ", prompt.lower())
-    words = set(normalized.split())
-    asks_about_creator = (
-        bool(words & {"created", "creator", "made", "developer", "developed"})
-        and bool(words & {"you", "your"})
-    )
-    asks_about_openai_identity = "openai" in words and bool(
-        words & {"you", "your", "created", "made", "developer", "developed"}
-    )
-    if asks_about_creator or asks_about_openai_identity:
-        return LUSAS_IDENTITY
-    return None
 
 from lusas_ai.identity import CREATOR_QUESTION, IDENTITY_RESPONSE
 
@@ -59,7 +37,6 @@ def load_model(model_path: Path):
     return torch, tokenizer, model, device
 
 
-<<<<<<< Updated upstream
 def generate_loaded(
     torch,
     tokenizer,
@@ -77,12 +54,6 @@ def generate_loaded(
 ) -> str:
     if CREATOR_QUESTION.search(prompt):
         return IDENTITY_RESPONSE
-=======
-def generate_loaded(torch, tokenizer, model, device: str, prompt: str, max_new_tokens: int) -> str:
-    branded_response = identity_response(prompt)
-    if branded_response is not None:
-        return branded_response
->>>>>>> Stashed changes
     formatted = (
         f"### System:\n{MODEL_SYSTEM_PROMPT}\n\n"
         "### Instruction:\n"
