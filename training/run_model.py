@@ -28,7 +28,13 @@ def load_model(model_path: Path):
             "Python interpreter: python3 -m pip install -r training/requirements.txt"
         ) from exc
 
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        else "cpu"
+    )
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     model = AutoPeftModelForCausalLM.from_pretrained(
         model_path,

@@ -116,6 +116,11 @@ since the previous successful cycle, it records a `skipped` event instead of
 retraining the same data, making the five-minute schedule faster and reducing
 unnecessary heat, memory use, and model churn.
 
+Training now uses Apple MPS when available, larger batches on GPU/MPS, and
+disabled pinned memory on MPS where it is unsupported. A rejected candidate is
+also recorded as the current input result, so the same failed dataset is not
+retrained every five minutes until new data or evaluation inputs arrive.
+
 Every successful promotion increments the local LUSAS version by `0.000001`.
 For example, the first successful upgrade is `0.000001`, followed by
 `0.000002`. Rejected candidates do not increment the version, but every attempt

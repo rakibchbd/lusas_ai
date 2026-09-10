@@ -78,6 +78,7 @@ def train(
         dtype = torch.float16
     else:
         dtype = torch.float32
+    mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
         dtype=dtype,
@@ -99,13 +100,15 @@ def train(
         args=TrainingArguments(
             output_dir=str(output_path),
             num_train_epochs=epochs,
-            per_device_train_batch_size=1,
-            gradient_accumulation_steps=8,
+            per_device_train_batch_size=2 if (torch.cuda.is_available() or mps_available) else 1,
+            gradient_accumulation_steps=4 if (torch.cuda.is_available() or mps_available) else 8,
             learning_rate=2e-4,
             logging_steps=1,
             save_strategy="epoch",
             report_to=[],
             fp16=torch.cuda.is_available(),
+            dataloader_num_workers=0,
+            dataloader_pin_memory=torch.cuda.is_available(),
         ),
         train_dataset=tokenized,
         processing_class=tokenizer,

@@ -142,6 +142,15 @@ def run_once(root: Path) -> dict:
             score=report["score"],
             learned_examples=len(records),
             publication=publication,
+            code_upgrade=code_upgrade,
+        )
+        write_cycle_state(
+            settings.cycle_state_path,
+            {
+                "input_fingerprint": input_fingerprint,
+                "version": version,
+                "last_status": "promoted",
+            },
         )
         data_path.unlink(missing_ok=True)
         return {
@@ -169,6 +178,14 @@ def run_once(root: Path) -> dict:
         score=report["score"],
         learned_examples=len(records),
         code_upgrade=code_upgrade,
+    )
+    write_cycle_state(
+        settings.cycle_state_path,
+        {
+            "input_fingerprint": input_fingerprint,
+            "version": None,
+            "last_status": "rejected",
+        },
     )
     write_cycle_state(
         settings.cycle_state_path,
