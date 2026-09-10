@@ -90,6 +90,9 @@ candidate, then start the interactive model runner:
 python3 training/run_model.py --model models/production --interactive
 ~~~
 
+LUSAS identifies itself as developed by Lusa Chowdhury (Rakib). The current
+local model is based on an open-weight coding model and fine-tuned locally.
+
 Prepare a self-upgrade:
 
 ~~~text
