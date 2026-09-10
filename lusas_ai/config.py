@@ -22,9 +22,13 @@ class Settings:
     auto_apply_upgrades: bool = False
     auto_model_upgrades: bool = True
     auto_publish_upgrades: bool = True
+    auto_code_upgrades: bool = True
     model_upgrade_interval_minutes: int = 1440
     notify_file: str = ".lusas/notifications.jsonl"
     web_pending_file: str = ".lusas/web_pending.jsonl"
+    upgrade_log_file: str = ".lusas/upgrade_log.jsonl"
+    upgrade_state_file: str = ".lusas/upgrade_state.json"
+    cycle_state_file: str = ".lusas/cycle_state.json"
 
     @property
     def workspace_root(self) -> Path:
@@ -71,6 +75,9 @@ class Settings:
             auto_publish_upgrades=bool(
                 payload.get("auto_publish_upgrades", cls.auto_publish_upgrades)
             ),
+            auto_code_upgrades=bool(
+                payload.get("auto_code_upgrades", cls.auto_code_upgrades)
+            ),
             model_upgrade_interval_minutes=int(
                 payload.get(
                     "model_upgrade_interval_minutes",
@@ -80,6 +87,15 @@ class Settings:
             notify_file=str(payload.get("notify_file", cls.notify_file)),
             web_pending_file=str(
                 payload.get("web_pending_file", cls.web_pending_file)
+            ),
+            upgrade_log_file=str(
+                payload.get("upgrade_log_file", cls.upgrade_log_file)
+            ),
+            upgrade_state_file=str(
+                payload.get("upgrade_state_file", cls.upgrade_state_file)
+            ),
+            cycle_state_file=str(
+                payload.get("cycle_state_file", cls.cycle_state_file)
             ),
         )
 
@@ -94,3 +110,15 @@ class Settings:
     @property
     def web_pending_path(self) -> Path:
         return (self.root / self.web_pending_file).resolve()
+
+    @property
+    def upgrade_log_path(self) -> Path:
+        return (self.root / self.upgrade_log_file).resolve()
+
+    @property
+    def upgrade_state_path(self) -> Path:
+        return (self.root / self.upgrade_state_file).resolve()
+
+    @property
+    def cycle_state_path(self) -> Path:
+        return (self.root / self.cycle_state_file).resolve()
