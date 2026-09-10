@@ -52,7 +52,10 @@ def run_once(root: Path) -> dict:
             )
     input_fingerprint = fingerprint([base_data_path, settings.learning_path, eval_path])
     cycle_state = read_cycle_state(settings.cycle_state_path)
-    if cycle_state.get("input_fingerprint") == input_fingerprint:
+    if (
+        cycle_state.get("input_fingerprint") == input_fingerprint
+        and cycle_state.get("learned_examples") == len(records)
+    ):
         progress("training inputs unchanged; skipping")
         record(
             settings.upgrade_log_path,
@@ -154,6 +157,7 @@ def run_once(root: Path) -> dict:
             settings.cycle_state_path,
             {
                 "input_fingerprint": input_fingerprint,
+                "learned_examples": len(records),
                 "version": version,
                 "last_status": "promoted",
             },
@@ -188,6 +192,7 @@ def run_once(root: Path) -> dict:
         settings.cycle_state_path,
         {
             "input_fingerprint": input_fingerprint,
+            "learned_examples": len(records),
             "version": None,
             "last_status": "rejected",
         },
