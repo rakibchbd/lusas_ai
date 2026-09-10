@@ -8,7 +8,7 @@
   "auto_apply_upgrades": true,
   "auto_model_upgrades": true,
   "auto_publish_upgrades": true,
-  "model_upgrade_interval_minutes": 1440,
+  "model_upgrade_interval_minutes": 5,
   "notify_file": ".lusas/notifications.jsonl",
   "web_pending_file": ".lusas/web_pending.jsonl"
 }

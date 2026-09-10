@@ -101,6 +101,10 @@ publish if the working tree already contains local changes. Model weight files
 remain local because they are excluded by `.gitignore`; the pull request
 contains the learned data and upgrade history, not large model binaries.
 
+The configured automatic model-upgrade interval is five minutes. Keep the
+continuous worker running with `python3 training/auto_upgrade.py`; each cycle
+still trains and evaluates a candidate before promotion.
+
 To talk directly with the trained LUSAS model, first prepare and promote a
 candidate, then start the interactive model runner:
 
