@@ -22,6 +22,7 @@ from .config import Settings
 
 MAX_RESPONSE_BYTES = 2_000_000
 MAX_SUMMARY_CHARS = 3_000
+MAX_CONTEXT_CHARS = 6_000
 
 
 class _HTMLTextParser(HTMLParser):
@@ -373,10 +374,18 @@ def search(settings: Settings, query: str, limit: int = 3) -> list[dict[str, str
 
 def context(settings: Settings, query: str, limit: int = 3) -> str:
     matches = search(settings, query, limit=limit)
-    return "\n\n".join(
-        f"Untrusted web reference ({item.get('verification_status', 'unverified')}): "
-        f"{item.get('title', '')}\n"
-        f"Source: {item.get('url', '')}\n"
-        f"Excerpt: {item.get('summary', '')}"
-        for item in matches
-    )
+    chunks: list[str] = []
+    used = 0
+    for item in matches:
+        chunk = (
+            f"Untrusted web reference ({item.get('verification_status', 'unverified')}): "
+            f"{item.get('title', '')}\n"
+            f"Source: {item.get('url', '')}\n"
+            f"Excerpt: {item.get('summary', '')}"
+        )
+        remaining = MAX_CONTEXT_CHARS - used
+        if remaining <= 0:
+            break
+        chunks.append(chunk[:remaining])
+        used += min(len(chunk), remaining) + 2
+    return "\n\n".join(chunks)

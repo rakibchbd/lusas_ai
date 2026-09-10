@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from lusas_ai.config import Settings
-from lusas_ai.web_learning import context, refresh
+from lusas_ai.web_learning import MAX_CONTEXT_CHARS, context, refresh
 
 
 class WebLearningTests(unittest.TestCase):
@@ -60,6 +60,30 @@ class WebLearningTests(unittest.TestCase):
             self.assertIn("Transformers release", result)
             self.assertIn("added a feature", result)
             self.assertIn("unverified", result)
+
+    def test_context_is_bounded_for_the_local_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            settings = Settings(root=root, web_learning_enabled=True)
+            settings.web_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            settings.web_cache_path.write_text(
+                "\n".join(
+                    json.dumps(
+                        {
+                            "id": str(index),
+                            "title": "performance update",
+                            "url": "https://example.com/update",
+                            "summary": "x" * 3_000,
+                        }
+                    )
+                    for index in range(3)
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertLessEqual(
+                len(context(settings, "performance update")), MAX_CONTEXT_CHARS
+            )
 
 
 if __name__ == "__main__":

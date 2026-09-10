@@ -114,7 +114,7 @@ class RepositoryAnalyzer:
             tests=tests,
         )
 
-    def snapshot(self, max_chars: int = 100_000) -> str:
+    def snapshot(self, max_chars: int = 16_000) -> str:
         chunks: list[str] = []
         used = 0
         for relative in self.analyze().files:

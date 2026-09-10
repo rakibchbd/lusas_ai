@@ -161,7 +161,7 @@ class LusasAgent:
             learning_file=str(self.settings.learning_path),
         )
 
-    def _source_snapshot(self, max_chars: int = 100_000) -> str:
+    def _source_snapshot(self, max_chars: int = 24_000) -> str:
         chunks: list[str] = []
         used = 0
         for directory_name in ("lusas_ai", "tests"):
