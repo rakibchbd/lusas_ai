@@ -4,6 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
+from training.hf_auth import auth_kwargs
+
 
 def load_records(path: Path) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
@@ -62,7 +64,8 @@ def train(
 
     records = load_records(data_path)
     dataset = Dataset.from_list(records)
-    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    hub_auth = auth_kwargs()
+    tokenizer = AutoTokenizer.from_pretrained(base_model, **hub_auth)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -82,6 +85,7 @@ def train(
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
         dtype=dtype,
+        **hub_auth,
     )
     model = get_peft_model(
         model,

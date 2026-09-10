@@ -47,6 +47,16 @@ python3 training/train_lora.py \
 python3 -m lusas_ai status
 ~~~
 
+Hugging Face access is read from the `HF_TOKEN` environment variable when it
+is available. The token is never stored in `config.json`, source files, logs,
+or Git. Public models work without a token, while a read-only token provides
+higher Hub rate limits and access to models your account is allowed to use:
+
+~~~text
+read -s HF_TOKEN
+export HF_TOKEN
+~~~
+
 Promote a candidate after evaluation, then run:
 
 ~~~text
