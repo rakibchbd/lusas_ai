@@ -1,4 +1,8 @@
 #!/bin/sh
-cd "/Users/rakib/Documents/LUSAS_AI" || exit 1
-exec "/Users/rakib/Documents/LUSAS_AI/.venv/bin/python" \
-  "/Users/rakib/Documents/LUSAS_AI/training/auto_upgrade.py" --once
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+PYTHON="$ROOT/.venv/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON=python3
+fi
+exec "$PYTHON" "$ROOT/training/auto_upgrade.py" --once

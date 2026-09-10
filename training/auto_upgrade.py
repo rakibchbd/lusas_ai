@@ -21,7 +21,7 @@ from lusas_ai.upgrade_log import current_count, format_version, next_version, re
 from lusas_ai.version_registry import append_version
 from lusas_ai.web_learning import refresh as refresh_web
 from training.evaluate_model import evaluate
-from training.model_lifecycle import promote
+from training.model_lifecycle import promote, restore_backup
 from training.train_lora import train
 
 
@@ -170,6 +170,60 @@ def run_once(root: Path) -> dict:
     if quality_passed:
         progress("promoting validated model")
         backup = promote(candidate, root, evaluation_passed=True)
+        progress("checking deployed model health")
+        deployed_report = evaluate(settings.local_model_path, eval_path, max_new_tokens=128)
+        if not deployed_report["passed"]:
+            restore_backup(backup, root)
+            reason = "post-deploy health check failed; previous model restored"
+            record_failure(
+                root,
+                "post-deploy-model-health",
+                reason,
+                candidate=str(candidate),
+                score=deployed_report["score"],
+            )
+            notify(
+                root,
+                settings.notification_path,
+                "Automatic model upgrade rolled back after deployment health failure.",
+                candidate=str(candidate),
+                backup=str(backup),
+                score=deployed_report["score"],
+            )
+            record(
+                settings.upgrade_log_path,
+                time=started_at,
+                status="rolled_back",
+                version=None,
+                candidate=str(candidate),
+                score=deployed_report["score"],
+                baseline_score=baseline_score,
+                improvement=improvement,
+                learned_examples=len(records),
+                web_new_items=web_result.get("new_items", 0),
+                rollback_point=str(backup),
+                reason=reason,
+            )
+            write_cycle_state(
+                settings.cycle_state_path,
+                {
+                    "input_fingerprint": input_fingerprint,
+                    "learned_examples": len(records),
+                    "version": None,
+                    "last_status": "rolled_back",
+                    "candidate_score": report["score"],
+                    "baseline_score": baseline_score,
+                    "improvement": improvement,
+                },
+            )
+            data_path.unlink(missing_ok=True)
+            return {
+                "status": "rolled_back",
+                "candidate": str(candidate),
+                "backup": str(backup),
+                "score": deployed_report["score"],
+                "reason": reason,
+            }
         parent_version = format_version(current_count(settings.upgrade_state_path))
         version = next_version(settings.upgrade_state_path)
         append_version(

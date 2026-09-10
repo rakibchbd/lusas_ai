@@ -50,10 +50,20 @@ def promote(candidate: Path, root: Path, evaluation_passed: bool) -> Path:
     production = models_root / "production"
     backup = backup_production(root, production)
     incoming = models_root / f".production-{run_id()}"
+    previous = models_root / f".previous-production-{run_id()}"
     shutil.copytree(candidate, incoming)
-    if production.exists():
-        shutil.rmtree(production)
-    incoming.rename(production)
+    try:
+        if production.exists():
+            production.rename(previous)
+        incoming.rename(production)
+    except Exception:
+        if production.exists() and production != incoming:
+            shutil.rmtree(production, ignore_errors=True)
+        if previous.exists() and not production.exists():
+            previous.rename(production)
+        shutil.rmtree(incoming, ignore_errors=True)
+        raise
+    shutil.rmtree(previous, ignore_errors=True)
     return backup
 
 
@@ -68,9 +78,19 @@ def restore_backup(backup: Path, root: Path) -> None:
     production = root / "models" / "production"
     incoming = root / "models" / f".restore-{run_id()}"
     shutil.copytree(backup, incoming, ignore=shutil.ignore_patterns("manifest.json"))
-    if production.exists():
-        shutil.rmtree(production)
-    incoming.rename(production)
+    previous = root / "models" / f".previous-production-{run_id()}"
+    try:
+        if production.exists():
+            production.rename(previous)
+        incoming.rename(production)
+    except Exception:
+        if production.exists() and production != incoming:
+            shutil.rmtree(production, ignore_errors=True)
+        if previous.exists() and not production.exists():
+            previous.rename(production)
+        shutil.rmtree(incoming, ignore_errors=True)
+        raise
+    shutil.rmtree(previous, ignore_errors=True)
 
 
 def main() -> int:
