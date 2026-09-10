@@ -7,6 +7,7 @@
   "workspace": "workspace",
   "auto_apply_upgrades": true,
   "auto_model_upgrades": true,
+  "auto_publish_upgrades": true,
   "model_upgrade_interval_minutes": 1440,
   "notify_file": ".lusas/notifications.jsonl"
 }
