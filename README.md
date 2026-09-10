@@ -22,10 +22,11 @@ Included:
 - pre-apply backups
 - tests, rollback-ready artifacts, and notifications
 
-The checked-in configuration enables automatic software and model upgrades.
-Every model cycle trains a candidate, evaluates it, backs up the active model,
-and promotes it only when the evaluation passes. Software self-upgrades remain
-bounded to the agent, test, and training source directories.
+The checked-in configuration enables automatic model evaluation and promotion,
+while source-code evolution is disabled by default. Every model cycle trains a
+candidate, evaluates it, backs up the active model, and promotes it only when
+the evaluation passes. Software self-upgrades remain bounded to the agent, test,
+and training source directories and must be explicitly enabled after review.
 
 Training a foundation model from zero requires a large curated dataset and
 substantial accelerator compute. This project starts with a local fine-tuned
@@ -94,22 +95,32 @@ checks `robots.txt`, applies a 512 KB response limit and a five-second delay,
 and writes samples to `.lusas/web_pending.jsonl`. Web content is not added to
 training automatically; review it before approving it with `lusas learn`.
 
-When `auto_publish_upgrades` is enabled, a passing upgrade is also recorded in
-the tracked learning history, committed to a new `lusas/upgrade-*` branch,
-pushed to `origin`, and submitted as a pull request with `gh`. It will not
-publish if the working tree already contains local changes. Model weight files
-remain local because they are excluded by `.gitignore`; the pull request
-contains the learned data and upgrade history, not large model binaries.
+Upgrades remain local by design. The model, source changes, learned records,
+version state, and logs are never pushed automatically to GitHub. Review and
+push changes manually when you are ready.
 
 The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle
 still trains and evaluates a candidate before promotion.
 
-With `auto_code_upgrades` enabled, each passing model cycle also asks the
-current local LUSAS model to propose a small source-code improvement. The
-proposal is staged in isolation, tested with the full unit-test suite, and
-applied only when tests pass. Invalid, unsafe, or failing proposals are
-rejected and logged without stopping the next cycle.
+Run the guarded code-evolution pipeline directly with:
+
+~~~text
+python3 -m lusas_ai evolve --goal "Improve parser reliability" --apply
+~~~
+
+With both `evolution_enabled` and `auto_code_upgrades` enabled, each passing
+model cycle also asks the current local LUSAS model to propose a small
+source-code improvement. The
+guarded evolution pipeline analyzes the repository, validates protected paths,
+creates an isolated candidate workspace, runs standard-library AST security
+checks and the full unit-test suite, records quality metrics, and compares
+the candidate before deployment. Invalid, unsafe, or failing proposals are
+rejected and logged without stopping the next cycle. Evolution is local-only:
+it never pushes to GitHub, performs unrestricted crawling, or deploys arbitrary
+code. Candidates are limited to `lusas_ai/`, `tests/`, and `training/`, and
+rollback backups remain available under `.lusas/backups/`. Validated code
+changes are staged unless `auto_apply_upgrades` is also enabled.
 
 The worker fingerprints its training and evaluation inputs. If nothing changed
 since the previous successful cycle, it records a `skipped` event instead of

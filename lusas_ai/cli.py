@@ -74,6 +74,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Apply the candidate only after its tests pass.",
     )
+    evolve_parser = subparsers.add_parser(
+        "evolve",
+        help="Run the guarded analyzer, quality, security, and deployment pipeline.",
+    )
+    evolve_parser.add_argument("--goal", required=True, help="Improvement objective.")
+    evolve_parser.add_argument(
+        "--apply", action="store_true",
+        help="Deploy only after every evolution gate passes.",
+    )
     rollback_parser = subparsers.add_parser(
         "rollback",
         help="Restore a previous self-upgrade backup.",
@@ -114,6 +123,11 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 "Auto-apply self-upgrades: "
                 f"{'enabled' if agent.settings.auto_apply_upgrades else 'disabled'}"
+            )
+            print(
+                "Evolution scheduler: "
+                f"{'enabled' if agent.settings.evolution_enabled else 'disabled'} "
+                f"({agent.settings.evolution_interval_minutes} minute interval)"
             )
             return 0
 
@@ -163,6 +177,17 @@ def main(argv: list[str] | None = None) -> int:
             result = agent.self_upgrade(args.goal, apply=args.apply)
             _print_upgrade_result(result)
             return 0 if result.tests.passed else 1
+
+        if args.command == "evolve":
+            result = agent.evolve(args.goal, apply=args.apply)
+            print(f"Evolution: {result.status}")
+            if result.reason:
+                print(f"Reason: {result.reason}")
+            if result.candidate:
+                print(f"Candidate: {result.candidate}")
+            if result.backup:
+                print(f"Backup: {result.backup}")
+            return 0 if result.status in {"staged", "promoted"} else 1
 
         if args.command == "rollback":
             restore_backup(agent.settings.root, args.backup)

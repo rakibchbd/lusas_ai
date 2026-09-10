@@ -16,7 +16,6 @@ from lusas_ai.config import Settings
 from lusas_ai.agent import LusasAgent, ProposalError
 from lusas_ai.cycle_state import fingerprint, read as read_cycle_state, write as write_cycle_state
 from lusas_ai.notifications import notify
-from lusas_ai.publisher import publish_upgrade
 from lusas_ai.upgrade_log import next_version, record
 from training.evaluate_model import evaluate
 from training.model_lifecycle import promote
@@ -81,27 +80,24 @@ def run_once(root: Path) -> dict:
     )
 
     code_upgrade = {"status": "disabled"}
-    if report["passed"] and settings.auto_code_upgrades:
+    if report["passed"] and settings.evolution_enabled and settings.auto_code_upgrades:
         try:
             agent = LusasAgent(root)
-            summary, changes = agent.propose_self_upgrade(
+            result = agent.evolve(
                 "Review the LUSAS source for one small, measurable reliability, "
                 "testability, or performance improvement. Return no change if "
-                "there is no safe improvement."
+                "there is no safe improvement.",
+                apply=settings.auto_apply_upgrades,
             )
-            if changes:
-                result = agent.self_upgrade(
-                    f"Autonomous code improvement: {summary}",
-                    apply=True,
-                )
+            if result.status in {"promoted", "staged"}:
                 code_upgrade = {
-                    "status": "applied" if result.applied else "staged",
-                    "summary": summary,
-                    "tests_passed": result.tests.passed,
-                    "files": sorted(changes),
+                    "status": result.status,
+                    "summary": result.summary,
+                    "tests_passed": bool(result.metrics and result.metrics.tests_passed),
+                    "files": sorted(result.files),
                 }
             else:
-                code_upgrade = {"status": "no_change", "summary": summary}
+                code_upgrade = {"status": result.status, "reason": result.reason}
         except (ProposalError, ValueError, OSError, RuntimeError) as exc:
             code_upgrade = {"status": "rejected", "error": str(exc)}
             notify(
@@ -114,14 +110,6 @@ def run_once(root: Path) -> dict:
     if report["passed"]:
         version = next_version(settings.upgrade_state_path)
         backup = promote(candidate, root, evaluation_passed=True)
-        publication = None
-        if settings.auto_publish_upgrades:
-            publication = publish_upgrade(
-                root,
-                candidate,
-                report["score"],
-                records,
-            )
         notify(
             root,
             settings.notification_path,
@@ -129,7 +117,6 @@ def run_once(root: Path) -> dict:
             candidate=str(candidate),
             backup=str(backup),
             score=report["score"],
-            publication=publication,
             version=version,
             code_upgrade=code_upgrade,
         )
@@ -141,7 +128,6 @@ def run_once(root: Path) -> dict:
             candidate=str(candidate),
             score=report["score"],
             learned_examples=len(records),
-            publication=publication,
             code_upgrade=code_upgrade,
         )
         write_cycle_state(
@@ -158,7 +144,6 @@ def run_once(root: Path) -> dict:
             "candidate": str(candidate),
             "backup": str(backup),
             "score": report["score"],
-            "publication": publication,
             "code_upgrade": code_upgrade,
         }
 
@@ -185,14 +170,6 @@ def run_once(root: Path) -> dict:
             "input_fingerprint": input_fingerprint,
             "version": None,
             "last_status": "rejected",
-        },
-    )
-    write_cycle_state(
-        settings.cycle_state_path,
-        {
-            "input_fingerprint": input_fingerprint,
-            "version": version,
-            "last_status": "promoted",
         },
     )
     data_path.unlink(missing_ok=True)

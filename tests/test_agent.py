@@ -22,6 +22,13 @@ class AgentIdentityTests(unittest.TestCase):
             self.assertEqual(response, IDENTITY_RESPONSE)
             self.assertIn("Systems Engineer", response)
 
+    def test_indirect_creator_question_returns_one_biography(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            response = agent.chat("who the developer is?")
+            self.assertEqual(response, IDENTITY_RESPONSE)
+            self.assertNotIn("### Instruction:", response)
+
 
 if __name__ == "__main__":
     unittest.main()
