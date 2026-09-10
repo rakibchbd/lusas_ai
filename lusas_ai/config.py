@@ -22,7 +22,9 @@ class Settings:
     auto_apply_upgrades: bool = False
     auto_model_upgrades: bool = True
     auto_code_upgrades: bool = True
-    model_upgrade_interval_minutes: int = 1440
+    model_upgrade_interval_minutes: int = 5
+    evolution_enabled: bool = True
+    evolution_interval_minutes: int = 5
     notify_file: str = ".lusas/notifications.jsonl"
     web_pending_file: str = ".lusas/web_pending.jsonl"
     upgrade_log_file: str = ".lusas/upgrade_log.jsonl"
@@ -78,6 +80,14 @@ class Settings:
                 payload.get(
                     "model_upgrade_interval_minutes",
                     cls.model_upgrade_interval_minutes,
+                )
+            ),
+            evolution_enabled=bool(
+                payload.get("evolution_enabled", cls.evolution_enabled)
+            ),
+            evolution_interval_minutes=int(
+                payload.get(
+                    "evolution_interval_minutes", cls.evolution_interval_minutes
                 )
             ),
             notify_file=str(payload.get("notify_file", cls.notify_file)),

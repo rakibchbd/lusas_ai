@@ -14,6 +14,15 @@ from .notifications import notify
 
 
 MANAGED_DIRECTORIES = ("lusas_ai", "tests", "training")
+PROTECTED_PARTS = {
+    ".git",
+    ".lusas",
+    ".github",
+    "config.json",
+    "pyproject.toml",
+    "models",
+    "workspace",
+}
 
 
 @dataclass(frozen=True)
@@ -35,7 +44,10 @@ def _managed_files(root: Path) -> list[Path]:
     for directory_name in MANAGED_DIRECTORIES:
         directory = root / directory_name
         if directory.exists():
-            files.extend(path for path in directory.rglob("*") if path.is_file())
+            files.extend(
+                path for path in directory.rglob("*")
+                if path.is_file() and not path.is_symlink()
+            )
     return sorted(files)
 
 
@@ -43,9 +55,11 @@ def _validate_relative_path(relative_path: str) -> Path:
     path = Path(relative_path)
     if (
         path.is_absolute()
+        or "\\" in relative_path
         or not path.parts
         or ".." in path.parts
         or path.parts[0] not in MANAGED_DIRECTORIES
+        or any(part in PROTECTED_PARTS for part in path.parts)
     ):
         raise ValueError(
             f"Self-upgrades may only change files under {MANAGED_DIRECTORIES}."
@@ -54,7 +68,7 @@ def _validate_relative_path(relative_path: str) -> Path:
 
 
 def _run_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 def create_backup(root: Path) -> Path:
@@ -75,6 +89,10 @@ def create_backup(root: Path) -> Path:
 
 
 def stage_candidate(root: Path, changes: Mapping[str, str]) -> Path:
+    validated_changes = [
+        (_validate_relative_path(relative_name), content)
+        for relative_name, content in changes.items()
+    ]
     staging_path = root / ".lusas" / "staging" / _run_id()
     staging_path.mkdir(parents=True, exist_ok=False)
 
@@ -84,8 +102,7 @@ def stage_candidate(root: Path, changes: Mapping[str, str]) -> Path:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
 
-    for relative_name, content in changes.items():
-        relative = _validate_relative_path(relative_name)
+    for relative, content in validated_changes:
         destination = staging_path / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(content, encoding="utf-8")

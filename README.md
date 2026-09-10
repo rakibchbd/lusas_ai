@@ -102,11 +102,22 @@ The configured automatic model-upgrade interval is five minutes. Keep the
 continuous worker running with `python3 training/auto_upgrade.py`; each cycle
 still trains and evaluates a candidate before promotion.
 
+Run the guarded code-evolution pipeline directly with:
+
+~~~text
+python3 -m lusas_ai evolve --goal "Improve parser reliability" --apply
+~~~
+
 With `auto_code_upgrades` enabled, each passing model cycle also asks the
 current local LUSAS model to propose a small source-code improvement. The
-proposal is staged in isolation, tested with the full unit-test suite, and
-applied only when tests pass. Invalid, unsafe, or failing proposals are
-rejected and logged without stopping the next cycle.
+guarded evolution pipeline analyzes the repository, validates protected paths,
+creates an isolated candidate workspace, runs standard-library AST security
+checks and the full unit-test suite, records quality metrics, and compares
+the candidate before deployment. Invalid, unsafe, or failing proposals are
+rejected and logged without stopping the next cycle. Evolution is local-only:
+it never pushes to GitHub, performs unrestricted crawling, or deploys arbitrary
+code. Candidates are limited to `lusas_ai/`, `tests/`, and `training/`, and
+rollback backups remain available under `.lusas/backups/`.
 
 The worker fingerprints its training and evaluation inputs. If nothing changed
 since the previous successful cycle, it records a `skipped` event instead of

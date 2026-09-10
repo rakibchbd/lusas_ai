@@ -11,6 +11,7 @@ from .local_model import LocalModel
 from .notifications import notify
 from .updater import UpgradeResult, perform_upgrade
 from .workspace import Workspace
+from .evolution import EvolutionOrchestrator, EvolutionResult
 
 
 AGENT_SYSTEM_PROMPT = f"""You are LUSAS AI, also called Lusa.
@@ -108,6 +109,12 @@ class LusasAgent:
     def self_upgrade(self, goal: str, apply: bool = False) -> UpgradeResult:
         _, changes = self.propose_self_upgrade(goal)
         return perform_upgrade(self.settings, changes, goal=goal, apply=apply)
+
+    def evolve(self, goal: str, apply: bool = False) -> EvolutionResult:
+        """Run the guarded production evolution pipeline with the local model."""
+        return EvolutionOrchestrator(self.settings, self.model).run(
+            goal, apply=apply
+        )
 
     def learn(self, instruction: str, output: str) -> None:
         self.learning.add(instruction, output)

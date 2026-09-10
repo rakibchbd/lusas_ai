@@ -29,6 +29,8 @@ class UpdaterTests(unittest.TestCase):
             root = Path(temporary)
             with self.assertRaises(ValueError):
                 stage_candidate(root, {"config.json": "{}"})
+            with self.assertRaises(ValueError):
+                stage_candidate(root, {"lusas_ai/.git/config": "unsafe"})
 
     def test_upgrade_tests_and_applies_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

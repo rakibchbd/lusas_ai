@@ -83,24 +83,21 @@ def run_once(root: Path) -> dict:
     if report["passed"] and settings.auto_code_upgrades:
         try:
             agent = LusasAgent(root)
-            summary, changes = agent.propose_self_upgrade(
+            result = agent.evolve(
                 "Review the LUSAS source for one small, measurable reliability, "
                 "testability, or performance improvement. Return no change if "
-                "there is no safe improvement."
+                "there is no safe improvement.",
+                apply=True,
             )
-            if changes:
-                result = agent.self_upgrade(
-                    f"Autonomous code improvement: {summary}",
-                    apply=True,
-                )
+            if result.status in {"promoted", "staged"}:
                 code_upgrade = {
-                    "status": "applied" if result.applied else "staged",
-                    "summary": summary,
-                    "tests_passed": result.tests.passed,
-                    "files": sorted(changes),
+                    "status": result.status,
+                    "summary": result.summary,
+                    "tests_passed": bool(result.metrics and result.metrics.tests_passed),
+                    "files": sorted(result.files),
                 }
             else:
-                code_upgrade = {"status": "no_change", "summary": summary}
+                code_upgrade = {"status": result.status, "reason": result.reason}
         except (ProposalError, ValueError, OSError, RuntimeError) as exc:
             code_upgrade = {"status": "rejected", "error": str(exc)}
             notify(
@@ -173,14 +170,6 @@ def run_once(root: Path) -> dict:
             "input_fingerprint": input_fingerprint,
             "version": None,
             "last_status": "rejected",
-        },
-    )
-    write_cycle_state(
-        settings.cycle_state_path,
-        {
-            "input_fingerprint": input_fingerprint,
-            "version": version,
-            "last_status": "promoted",
         },
     )
     data_path.unlink(missing_ok=True)
