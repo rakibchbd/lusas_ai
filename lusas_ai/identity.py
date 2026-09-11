@@ -43,6 +43,7 @@ _NAME_INPUT_EXCLUSIONS = {
     "build",
     "code",
     "create",
+    "do",
     "explain",
     "for",
     "function",
@@ -51,6 +52,10 @@ _NAME_INPUT_EXCLUSIONS = {
     "how",
     "is",
     "make",
+    "me",
+    "my",
+    "know",
+    "need",
     "program",
     "python",
     "script",
@@ -61,6 +66,8 @@ _NAME_INPUT_EXCLUSIONS = {
     "who",
     "why",
     "write",
+    "you",
+    "your",
 }
 _PERSON_QUESTION_EXCLUSIONS = _NAME_INPUT_EXCLUSIONS | {
     "chatgpt",

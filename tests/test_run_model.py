@@ -147,6 +147,19 @@ class TrainedModelIdentityTests(unittest.TestCase):
         self.assertEqual(response, "Hello! I'm LUSAS AI. How can I help?")
         self.assertEqual(tokenizer.formatted, "")
 
+    def test_parameter_question_is_answered_without_generation(self) -> None:
+        tokenizer = self.FakeTokenizer()
+        response = generate_loaded(
+            self.FakeTorch(),
+            tokenizer,
+            self.FakeModel(),
+            "cpu",
+            "how many parameters do you have?",
+            128,
+        )
+        self.assertIn("0.5 billion parameters", response)
+        self.assertEqual(tokenizer.formatted, "")
+
 
 if __name__ == "__main__":
     unittest.main()

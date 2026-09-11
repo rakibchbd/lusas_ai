@@ -247,8 +247,34 @@ class AgentIdentityTests(unittest.TestCase):
 
             agent.model = FailingModel()
             response = agent.chat("what you know?")
-            self.assertIn("structured project knowledge", response)
-            self.assertIn("guarded upgrades", response)
+            self.assertIn("local knowledge base", response)
+            self.assertIn("configured web references", response)
+
+    def test_user_identity_question_uses_shared_facts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+
+            class FailingModel:
+                def chat(self, prompt: str) -> str:
+                    raise AssertionError("user identity should not need generation")
+
+            agent.model = FailingModel()
+            response = agent.chat("do you know me?")
+            self.assertIn("Rakib Chowdhury", response)
+            self.assertNotIn("I don't have verified information", response)
+
+    def test_parameter_question_is_answered_from_model_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+
+            class FailingModel:
+                def chat(self, prompt: str) -> str:
+                    raise AssertionError("parameter count should not need generation")
+
+            agent.model = FailingModel()
+            response = agent.chat("how many peremeter do you have?")
+            self.assertIn("0.5 billion parameters", response)
+            self.assertNotIn("100000000", response)
 
     def test_ambiguous_name_does_not_trigger_web_scraping_or_code(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

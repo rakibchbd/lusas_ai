@@ -46,6 +46,7 @@ class IdentityIntentTests(unittest.TestCase):
             "I don't have verified information about Rakin Hasan yet. What would you like to know?",
         )
         self.assertFalse(is_ambiguous_name_prompt("Write a Python function"))
+        self.assertFalse(is_ambiguous_name_prompt("do you know me"))
 
     def test_unknown_person_question_is_detected_without_guessing(self) -> None:
         self.assertEqual(unknown_person_subject("who is abrar"), "abrar")
