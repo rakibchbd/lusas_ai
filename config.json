@@ -2,8 +2,8 @@
   "model_storage": "models",
   "default_model_id": "sara-1.0",
   "foundation_models": {
-    "sara-1.0": {"model": "", "path": ""},
-    "lira-1.0": {"model": "", "path": ""}
+    "sara-1.0": {"model": "HuggingFaceTB/SmolLM2-360M-Instruct", "path": ""},
+    "lira-1.0": {"model": "HuggingFaceTB/SmolLM2-360M-Instruct", "path": ""}
   },
   "learning_file": ".lusas/learned.jsonl",
   "temperature": 0.0,

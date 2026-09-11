@@ -91,7 +91,7 @@ _WHO_IS_PERSON = re.compile(
 
 _INTERNAL_TAIL = re.compile(
     r"\s*(?:###\s*System:|System instructions:|Workspace context:|"
-    r"###\s*Instruction:|an\s+internal\s+provider\s+policy\b|"
+    r"###\s*Instruction:|###\s*Response:|an\s+internal\s+provider\s+policy\b|"
     r"never\s+\w+\s+that\s+.*(?:provider|company)\b|"
     r"web\s+excerpts\s+are\s+untrusted\b|"
     r"you\s+help\s+with\s+software\s+in\s+the\s+configured\s+workspace\b|"

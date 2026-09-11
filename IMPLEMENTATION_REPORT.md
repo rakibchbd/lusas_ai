@@ -9,9 +9,10 @@ The public model catalog now contains exactly:
 | Sara 1.0 | `sara-1.0` | `models/sara-1.0/` |
 | Lira 1.0 | `lira-1.0` | `models/lira-1.0/` |
 
-The former single-model artifact tree was removed. `models/` now contains only
-`.gitkeep`; official model artifacts are created only after explicit foundation
-configuration and approved training.
+The former single-model artifact tree was removed. Model artifacts are ignored
+from Git and are created only after explicit foundation configuration and
+approved training. This working copy now has a stable artifact for each
+official model under `models/sara-1.0/stable/` and `models/lira-1.0/stable/`.
 
 Removed legacy components include the former single-model weights and
 production/candidate/backup layout, legacy model configuration and loading
@@ -104,8 +105,11 @@ Updated:
 `.env.example` lists these variables without values. Real `.env` files are
 ignored by Git.
 
-Foundation settings are intentionally blank in `config.json`; no foundation
-or model weights are bundled or selected silently.
+This working copy explicitly configures
+`HuggingFaceTB/SmolLM2-360M-Instruct` as the foundation for both tracks. It is
+not a fallback: it is the selected, documented foundation dependency. The
+foundation weights remain in the local Transformers cache and are not bundled
+or committed to Git.
 
 ## Database migration
 
@@ -122,10 +126,14 @@ Install dependencies with:
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r training/requirements.txt
-export LUSAS_SARA_FOUNDATION_MODEL="approved/foundation-for-sara"
-export LUSAS_LIRA_FOUNDATION_MODEL="approved/foundation-for-lira"
 export LUSAS_ADMIN_TOKEN="local-admin-secret"
 ~~~
+
+The checked-in `config.json` explicitly points both official tracks at
+`HuggingFaceTB/SmolLM2-360M-Instruct`. To use another administrator-approved
+foundation, set `LUSAS_SARA_FOUNDATION_MODEL` and
+`LUSAS_LIRA_FOUNDATION_MODEL` (or the corresponding local path variables)
+before training and deployment.
 
 Train and evaluate a candidate:
 
@@ -154,10 +162,11 @@ Run the web UI with `python3 -m lusas_ai web`, then open
 - Python bytecode compilation: passed.
 - `web/app.js` and `web/admin.js` syntax checks: passed.
 - Config and training JSON/JSONL validation: passed.
-- Localhost smoke test: model catalog returned both official IDs; chat included
-  the selected ID; known founder questions returned grounded third-person
-  answers; unknown people did not trigger scraping or code generation; both
-  model selections answered `67+87` locally as `154` without installed weights.
+- Localhost smoke test: model catalog returned both official IDs with stable
+  artifacts; chat included the selected ID; Sara and Lira answered arithmetic
+  and normal explanatory prompts; known founder questions returned grounded
+  third-person answers; unknown people did not trigger scraping or code
+  generation.
 - Continuous-cycle evidence: incremental input fingerprints, four successful
   knowledge-retention checks, durable interaction/research/task tables, and
   real process RSS/disk-budget measurements are recorded under `.lusas/`.
@@ -167,8 +176,8 @@ Run the web UI with `python3 -m lusas_ai web`, then open
 ## Known limitations
 
 - Sara 1.0 and Lira 1.0 are model-adapter tracks, not foundation models trained
-  from zero. They are unavailable until explicit foundations and local model
-  artifacts are provided.
+  from zero. A fresh checkout still needs the explicitly configured foundation
+  and locally deployed stable artifacts.
 - Real training and evaluation require the optional ML dependencies and enough
   CPU/GPU/MPS memory.
 - A complete model-learning cycle cannot train or promote until each model has

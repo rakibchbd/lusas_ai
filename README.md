@@ -32,6 +32,13 @@ export LUSAS_LIRA_FOUNDATION_MODEL="your-approved-lira-foundation"
 export LUSAS_ADMIN_TOKEN="choose-a-local-admin-secret"
 ~~~
 
+This checkout is configured to use the same explicit local foundation for both
+official tracks: `HuggingFaceTB/SmolLM2-360M-Instruct`. The public model names
+remain Sara 1.0 and Lira 1.0; the foundation name is only an implementation
+dependency. Replace the `foundation_models` entries in `config.json`, or use
+the per-model environment variables above, when an administrator approves a
+different foundation.
+
 Do not place tokens in `config.json`, source files, logs, or Git. A read-only
 `HF_TOKEN` may be used by the Transformers download path when the configured
 foundation requires it.
@@ -178,9 +185,10 @@ answered locally and never requires Sara or Lira weights.
 ## Project limits
 
 This repository supplies orchestration and model-adapter training, not a
-foundation model's weights. Sara 1.0 and Lira 1.0 therefore remain unavailable
-until their explicit foundation configuration, dependencies, approved data,
-and local artifacts are present. Training a capable model from zero requires a
-large lawful corpus and substantial accelerator resources. Automatic promotion
-is intentionally disabled until a human administrator approves a fully gated
+foundation model's weights. A fresh checkout must configure/download its
+approved foundation and create approved stable artifacts before generation is
+available. This working copy has both Sara 1.0 and Lira 1.0 stable artifacts
+deployed locally. Training a capable model from zero requires a large lawful
+corpus and substantial accelerator resources. Automatic promotion is
+intentionally disabled until a human administrator approves a fully gated
 candidate.

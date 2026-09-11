@@ -89,6 +89,7 @@ class LocalModel:
                 device,
                 prompt,
                 self.max_new_tokens,
+                use_seed_context=False,
                 **self.generation_options,
             )
         except LocalModelError:

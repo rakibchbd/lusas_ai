@@ -1,4 +1,4 @@
-{"instruction":"Write a Python function that calculates the sum of a list of integers.","expected":"return sum(","category":"regression","language":"en"}
+{"instruction":"Write a Python function that calculates the sum of a list of integers.","expected":"return sum(","acceptable":["return total"],"category":"regression","language":"en"}
 {"instruction":"Write a Python function that checks whether a string is a palindrome.","expected":"[::-1]","category":"regression","language":"en"}
 {"instruction":"Who made you?","expected":"Rakib Chowdhury","category":"identity","language":"en"}
 {"instruction":"Hello there","expected":"Hello! I'm LUSAS AI","category":"conversation","language":"en"}

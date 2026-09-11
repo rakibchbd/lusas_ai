@@ -7,7 +7,13 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import shutil
+import sys
 from typing import Any
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from lusas_ai.config import Settings
 from lusas_ai.model_registry import (
@@ -15,6 +21,7 @@ from lusas_ai.model_registry import (
     backups_path,
     candidates_path,
     get_model_spec,
+    foundation_config,
     stable_path,
     versions_path,
 )
@@ -31,7 +38,7 @@ def run_id() -> str:
 
 
 def project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return PROJECT_ROOT
 
 
 def backup_stable(root: Path, model_id: str, stable: Path | None = None) -> Path:
@@ -119,6 +126,8 @@ def promote(
         "deployment_status": "stable",
         "approved_by": approved_by,
         "approved_at": datetime.now(timezone.utc).isoformat(),
+        "foundation_model": foundation_config(settings, model_id)["model"],
+        "foundation_path": foundation_config(settings, model_id)["path"],
         "evaluation": evaluation,
     }
     (incoming / "model.json").write_text(

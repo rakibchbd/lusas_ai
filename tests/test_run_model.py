@@ -64,6 +64,12 @@ class TrainedModelIdentityTests(unittest.TestCase):
             "Useful answer.",
         )
 
+    def test_generated_response_marker_is_removed(self) -> None:
+        self.assertEqual(
+            strip_internal_prompt_leak("Useful answer.\n### Response:\n"),
+            "Useful answer.",
+        )
+
     def test_creator_question_reaches_model_with_relevant_context(self) -> None:
         response, formatted = self._generate("who is your developer?")
         self.assertEqual(response, "Lusa Chowdhury (Rakib) created LUSAS AI.")

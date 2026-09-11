@@ -111,11 +111,16 @@ def generate_loaded(
     repeat_penalty: float = 1.0,
     num_ctx: int | None = None,
     seed: int | None = None,
+    use_seed_context: bool = True,
 ) -> str:
     routine_response = quick_response(prompt)
     if routine_response is not None:
         return routine_response
-    learned = seed_context(prompt, limit=5)
+    # The standalone CLI passes a plain user prompt and benefits from the
+    # built-in seed context. The agent passes a fully assembled prompt that
+    # already contains its context; searching that wrapper would match words
+    # in the hidden instructions and can cause the model to echo them.
+    learned = seed_context(prompt, limit=5) if use_seed_context else ""
     if is_ambiguous_name_prompt(prompt) and not learned:
         return ambiguous_name_response(prompt)
     person_subject = unknown_person_subject(prompt)

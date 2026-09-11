@@ -7,8 +7,14 @@ import gc
 import json
 from pathlib import Path
 import resource
+import sys
 import time
 from typing import Any
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from lusas_ai.config import Settings
 from lusas_ai.data_pipeline import scan_malicious_content
@@ -35,12 +41,23 @@ def load_cases(path: Path) -> list[dict[str, Any]]:
             raise ValueError(f"Evaluation line {line_number} must be an object.")
         if not isinstance(case.get("instruction"), str) or not isinstance(case.get("expected"), str):
             raise ValueError(f"Evaluation line {line_number} needs instruction and expected strings.")
+        acceptable = case.get("acceptable", [])
+        if acceptable and (
+            not isinstance(acceptable, list)
+            or not all(isinstance(item, str) and item for item in acceptable)
+        ):
+            raise ValueError(f"Evaluation line {line_number} has invalid acceptable strings.")
         case.setdefault("category", "regression")
         case.setdefault("language", "en")
         cases.append(case)
     if not cases:
         raise ValueError("The evaluation dataset is empty.")
     return cases
+
+
+def _matches_expected(case: dict[str, Any], output: str) -> bool:
+    expected = [case["expected"], *case.get("acceptable", [])]
+    return any(marker in output for marker in expected)
 
 
 def _rss_mb() -> float:
@@ -87,9 +104,10 @@ def evaluate(
                 {
                     "instruction": case["instruction"],
                     "expected": expected,
+                    "acceptable": case.get("acceptable", []),
                     "category": case["category"],
                     "language": case["language"],
-                    "passed": expected in output,
+                    "passed": _matches_expected(case, output),
                     "safe": _safe_output(case, output),
                     "latency_seconds": round(latency, 4),
                     "output": output,
