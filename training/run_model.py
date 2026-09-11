@@ -17,6 +17,7 @@ warnings.filterwarnings(
 from lusas_ai.identity import (
     IDENTITY_RESPONSE,
     deterministic_response,
+    strip_internal_prompt_leak,
 )
 from training.hf_auth import auth_kwargs
 
@@ -27,8 +28,7 @@ identity_response = IDENTITY_RESPONSE
 MODEL_SYSTEM_PROMPT = (
     "You are LUSAS AI, also known as Lusa. If asked about your creator, "
     "developer, maker, author, or designer, provide the complete official "
-    f"creator biography:\n{IDENTITY_RESPONSE}\n"
-    "Never claim OpenAI or another company created you."
+    f"creator biography:\n{IDENTITY_RESPONSE}"
 )
 
 
@@ -109,10 +109,7 @@ def generate_loaded(
         output = model.generate(**inputs, **generation_options)
     generated_tokens = output[0][inputs["input_ids"].shape[-1] :]
     response = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
-    for marker in ("### System:", "System instructions:", "Workspace context:", "### Instruction:"):
-        if marker in response:
-            response = response.split(marker, 1)[0]
-    return response.strip() or "I could not produce a clean answer. Please try again."
+    return strip_internal_prompt_leak(response)
 
 
 def generate(model_path: Path, prompt: str, max_new_tokens: int = 128) -> str:
