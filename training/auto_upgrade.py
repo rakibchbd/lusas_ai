@@ -160,7 +160,9 @@ def run_once(root: Path) -> dict:
     initial_gaps = detect_gaps(settings, audit_result)
     engine.phase(cycle, "knowledge_gap_detection", open_gaps=len(initial_gaps))
     web_result = refresh_web(settings) if web_loop_enabled else {
-        "status": "disabled", "new_items": 0
+        "status": "disabled",
+        "new_items": 0,
+        "knowledge_items": 0,
     }
     progress("web learning checked", **web_result)
     if web_loop_enabled and web_result.get("status") in {"refreshed", "skipped"}:

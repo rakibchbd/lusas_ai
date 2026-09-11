@@ -19,6 +19,7 @@ from xml.etree import ElementTree
 
 from .config import Settings
 from .control import read as read_control, web_research_allowed
+from .knowledge import records as knowledge_records
 from .knowledge import upsert_web
 
 
@@ -253,18 +254,31 @@ def _read_state(path: Path) -> dict[str, object]:
 def _refresh_unlocked(settings: Settings, force: bool = False) -> dict[str, object]:
     """Fetch configured feeds and create local, non-executable learning records."""
     if not settings.web_learning_enabled:
-        return {"status": "disabled", "new_items": 0}
+        return {
+            "status": "disabled",
+            "new_items": 0,
+            "knowledge_items": len(knowledge_records(settings)),
+        }
     controls = read_control(settings.root, settings.autonomy_level)
     if not web_research_allowed(controls):
         return {
             "status": "disabled",
             "reason": "web research is disabled by runtime controls",
             "new_items": 0,
+            "knowledge_items": len(knowledge_records(settings)),
         }
     if not settings.web_sources:
-        return {"status": "no_sources", "new_items": 0}
+        return {
+            "status": "no_sources",
+            "new_items": 0,
+            "knowledge_items": len(knowledge_records(settings)),
+        }
     if not settings.web_allowed_domains:
-        return {"status": "no_allowed_domains", "new_items": 0}
+        return {
+            "status": "no_allowed_domains",
+            "new_items": 0,
+            "knowledge_items": len(knowledge_records(settings)),
+        }
 
     state = _read_state(settings.web_state_path)
     last_refresh = state.get("last_refresh")
@@ -278,6 +292,7 @@ def _refresh_unlocked(settings: Settings, force: bool = False) -> dict[str, obje
                     "status": "skipped",
                     "reason": "refresh interval not reached",
                     "new_items": 0,
+                    "knowledge_items": len(knowledge_records(settings)),
                 }
         except ValueError:
             pass
