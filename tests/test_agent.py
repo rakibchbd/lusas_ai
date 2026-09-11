@@ -124,8 +124,7 @@ class AgentIdentityTests(unittest.TestCase):
                 "Rakib Chowdhury is the creator and developer of LUSAS AI. "
                 "Lusa is his childhood nickname.",
             )
-            self.assertEqual(len(captured), 1)
-            self.assertIn("third person", captured[0])
+            self.assertEqual(len(captured), 0)
             self.assertNotIn("I am Rakib", response)
 
     def test_named_person_answer_is_repaired_when_project_relationship_is_missing(self) -> None:
@@ -146,9 +145,8 @@ class AgentIdentityTests(unittest.TestCase):
 
             agent.model = FakeModel()
             response = agent.chat("who is rakib")
-            self.assertEqual(response, "Rakib Chowdhury is the creator and developer of LUSAS AI.")
-            self.assertEqual(len(captured), 2)
-            self.assertIn("third person", captured[1])
+            self.assertEqual(response, "Rakib Chowdhury is the creator and developer of LUSAS AI. Lusa is his childhood nickname.")
+            self.assertEqual(len(captured), 0)
 
     def test_developer_question_receives_only_creator_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -309,7 +307,8 @@ class AgentIdentityTests(unittest.TestCase):
 
             agent.model = FailingModel()
             response = agent.chat("how many peremeter do you have?")
-            self.assertIn("0.5 billion parameters", response)
+            self.assertIn("Sara 1.0", response)
+            self.assertIn("Lira 1.0", response)
             self.assertNotIn("100000000", response)
 
     def test_ambiguous_name_does_not_trigger_web_scraping_or_code(self) -> None:

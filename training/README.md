@@ -1,10 +1,10 @@
-# LUSAS model training
+# Sara 1.0 and Lira 1.0 training
 
-This folder creates a LUSAS model adapter from an open-weight coding model.
-The resulting adapter is a new model artifact that can be evaluated and
-promoted independently of the agent runtime.
+The training tools create a local adapter for one of the two official LUSAS AI
+models. Use the stable internal IDs `sara-1.0` and `lira-1.0` on every command.
+The foundation is an explicit dependency, never an implicit fallback.
 
-## Prepare
+## Install
 
 ~~~text
 python3 -m venv .venv
@@ -15,51 +15,67 @@ python3 -m pip install -r training/requirements.txt
 ## Train a candidate
 
 ~~~text
-python3 training/train_lora.py --data training/data/examples.jsonl \
-  --output models/candidates/first
+python3 training/train_lora.py \
+  --model-id sara-1.0 \
+  --data training/data/examples.jsonl \
+  --output models/sara-1.0/candidates/first \
+  --foundation-model "$LUSAS_SARA_FOUNDATION_MODEL"
 ~~~
 
-Run the trained candidate directly:
+Use `--foundation-path /path/to/a/local/foundation` instead when the approved
+foundation is on disk. For Lira, use `--model-id lira-1.0` and its explicit
+`LUSAS_LIRA_FOUNDATION_MODEL` or `LUSAS_LIRA_FOUNDATION_PATH` setting.
+
+The input loader rejects unapproved, unverified, duplicate, or malicious
+records. Web records must be administrator-approved and corroborated before
+they become trainable.
+
+## Evaluate
 
 ~~~text
-python3 training/run_model.py --model models/candidates/first \
-  --prompt "Write a Python function that reverses a string."
+python3 training/evaluate_model.py \
+  --model-id sara-1.0 \
+  --model-path models/sara-1.0/candidates/first \
+  --data training/data/eval.jsonl
 ~~~
 
-Talk with the trained model interactively. The model loads once, then accepts
-multiple prompts until you type `/exit`:
+The result must report true for every required gate: accuracy, hallucination,
+safety, regression, English, Bengali, latency, and resources. A passing score
+alone is insufficient.
+
+## Run interactively
 
 ~~~text
-python3 training/run_model.py --model models/production --interactive
+python3 training/run_model.py --model-id sara-1.0 --interactive
 ~~~
 
-The default base model is a small coding model suitable for a first local
-prototype. Change --base-model after confirming your machine has enough
-memory for a larger model.
+Or use the saved selector choice by omitting `--model-id`. Type `/exit` to
+quit. If the selected model is not installed or its explicit foundation is
+not configured, the command fails clearly and does not substitute another
+model.
 
-## Promote a candidate
+## Promote and roll back
 
-Promotion creates a backup of the current production model before replacing
-it. Only promote after an evaluation job has passed:
+Promotion requires a complete evaluation JSON and an explicit administrator
+approval. The command creates a backup under the selected model's directory:
 
 ~~~text
 python3 training/model_lifecycle.py promote \
-  --candidate models/candidates/first --evaluation-passed
+  --model-id sara-1.0 \
+  --candidate models/sara-1.0/candidates/first \
+  --evaluation models/sara-1.0/candidates/first/evaluation.json \
+  --approved-by administrator \
+  --admin-approved
 ~~~
 
-The backup is kept under models/backups/. Model weights are intentionally
-excluded from Git by the root ignore file.
-
-## Automatic upgrades
-
-The project config enables a five-minute model/evolution worker and an
-allowlisted web refresh checked by that worker. Web feeds are refreshed at
-their configured interval, while model training runs only when its inputs
-change. A candidate is evaluated, backed up, and promoted only if it passes
-and scores better than the current production model:
+Restore a model-specific backup with:
 
 ~~~text
-python3 training/auto_upgrade.py
+python3 training/model_lifecycle.py rollback \
+  --model-id sara-1.0 \
+  --backup models/sara-1.0/backups/<backup-directory>
 ~~~
 
-Use --once to test one complete cycle.
+The automatic worker can train and evaluate candidates, but deployment always
+stops at `staged` until the administration dashboard or the approval API
+records human approval.

@@ -5,47 +5,52 @@ import gc
 import json
 from pathlib import Path
 
+from lusas_ai.model_registry import get_model_spec
+from lusas_ai.data_pipeline import approved_training_records
 from training.hf_auth import auth_kwargs
 
 
 def load_records(path: Path) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
-    for line_number, line in enumerate(
-        path.read_text(encoding="utf-8").splitlines(), start=1
-    ):
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
             continue
         record = json.loads(line)
         if not isinstance(record, dict):
             raise ValueError(f"Line {line_number} is not an object.")
-        instruction = record.get("instruction")
-        output = record.get("output")
-        if not isinstance(instruction, str) or not isinstance(output, str):
-            raise ValueError(
-                f"Line {line_number} needs string instruction and output fields."
-            )
-        records.append(
-            {
-                "text": (
-                    "### Instruction:\n"
-                    f"{instruction}\n\n"
-                    "### Response:\n"
-                    f"{output}"
-                )
-            }
-        )
+        records.extend(approved_training_records([record]))
     if not records:
-        raise ValueError("The training dataset is empty.")
-    return records
+        raise ValueError("The training dataset has no approved, clean records.")
+    return [
+        {
+            "text": (
+                "### Instruction:\n"
+                f"{record['instruction']}\n\n"
+                "### Response:\n"
+                f"{record['output']}"
+            )
+        }
+        for record in records
+    ]
 
 
 def train(
     data_path: Path,
     output_path: Path,
-    base_model: str,
+    model_id: str,
+    foundation_model: str | None,
+    foundation_path: Path | None,
     epochs: float,
     max_length: int,
 ) -> None:
+    spec = get_model_spec(model_id)
+    foundation_source = str(foundation_path.expanduser().resolve()) if foundation_path else foundation_model
+    if not foundation_source:
+        raise ValueError(
+            f"{spec.display_name} requires an explicit foundation model or local foundation path."
+        )
+    if foundation_path and not foundation_path.is_dir():
+        raise ValueError(f"Foundation path does not exist: {foundation_path}")
     try:
         import torch
         from datasets import Dataset
@@ -59,35 +64,27 @@ def train(
         )
     except ImportError as exc:
         raise RuntimeError(
-            "Training dependencies are missing. Install them with the same "
-            "Python interpreter: python3 -m pip install -r training/requirements.txt"
+            "Training dependencies are missing. Install the documented training extra."
         ) from exc
 
     records = load_records(data_path)
     dataset = Dataset.from_list(records)
     hub_auth = auth_kwargs()
-    tokenizer = AutoTokenizer.from_pretrained(base_model, **hub_auth)
+    tokenizer = AutoTokenizer.from_pretrained(foundation_source, **hub_auth)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
     def tokenize(batch: dict[str, list[str]]) -> dict[str, list[list[int]]]:
-        return tokenizer(
-            batch["text"],
-            truncation=True,
-            max_length=max_length,
-        )
+        return tokenizer(batch["text"], truncation=True, max_length=max_length)
 
     tokenized = dataset.map(tokenize, batched=True, remove_columns=["text"])
     mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
     dtype = torch.float16 if torch.cuda.is_available() else torch.float32
     model = AutoModelForCausalLM.from_pretrained(
-        base_model,
+        foundation_source,
         dtype=dtype,
         **hub_auth,
     )
-    # The model is trained on a laptop-class accelerator.  Disable the KV
-    # cache and checkpoint activations so the worker remains viable as the
-    # dataset grows instead of being killed by macOS memory pressure.
     model.config.use_cache = False
     if mps_available or not torch.cuda.is_available():
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -124,18 +121,28 @@ def train(
         ),
         train_dataset=tokenized,
         processing_class=tokenizer,
-        data_collator=DataCollatorForLanguageModeling(
-            tokenizer=tokenizer,
-            mlm=False,
-        ),
+        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
     )
     try:
         trainer.train()
         trainer.save_model(str(output_path))
         tokenizer.save_pretrained(str(output_path))
+        (output_path / "model.json").write_text(
+            json.dumps(
+                {
+                    "model_id": model_id,
+                    "display_name": spec.display_name,
+                    "foundation_model": foundation_model,
+                    "foundation_path": str(foundation_path.expanduser().resolve()) if foundation_path else None,
+                    "training_records": len(records),
+                    "deployment_status": "candidate",
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     finally:
-        # Trainer retains references to the base model and optimizer.  Free
-        # them before the same process loads the candidate for evaluation.
         del trainer
         del model
         gc.collect()
@@ -144,26 +151,25 @@ def train(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Train a LUSAS LoRA adapter from local training data."
-    )
+    parser = argparse.ArgumentParser(description="Train an official LUSAS AI model adapter.")
+    parser.add_argument("--model-id", choices=("sara-1.0", "lira-1.0"), required=True)
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument(
-        "--base-model",
-        default="Qwen/Qwen2.5-Coder-0.5B-Instruct",
-    )
+    parser.add_argument("--foundation-model", help="Explicit foundation model identifier")
+    parser.add_argument("--foundation-path", type=Path, help="Explicit local foundation model path")
     parser.add_argument("--epochs", type=float, default=1.0)
     parser.add_argument("--max-length", type=int, default=1024)
     args = parser.parse_args()
     train(
         data_path=args.data,
         output_path=args.output,
-        base_model=args.base_model,
+        model_id=args.model_id,
+        foundation_model=args.foundation_model,
+        foundation_path=args.foundation_path,
         epochs=args.epochs,
         max_length=args.max_length,
     )
-    print(f"Candidate model written to {args.output}")
+    print(f"{get_model_spec(args.model_id).display_name} candidate written to {args.output}")
     return 0
 
 

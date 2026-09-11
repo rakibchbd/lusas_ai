@@ -12,6 +12,7 @@ from .engine import read_cycles
 from .gaps import prioritized
 from .knowledge import is_outdated, records as knowledge_records
 from .learning import LearningStore
+from .model_registry import catalog, selected_model_id
 from .scorecard import history as scorecard_history
 from .skills import ensure_builtin
 from .upgrade_log import current_count, format_version
@@ -58,6 +59,8 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
         },
         "upgrade_count": state.get("upgrade_count", 0),
         "current_version": format_version(int(state.get("upgrade_count", 0))),
+        "selected_model_id": selected_model_id(settings),
+        "models": catalog(settings),
         "web_learning": {
             "enabled": settings.web_learning_enabled,
             "interval_minutes": settings.web_refresh_interval_minutes,
@@ -111,7 +114,7 @@ def snapshot(settings: Settings, recent: int = 10) -> str:
     )
     lines = [
         "LUSAS learning monitor",
-        f"Model: {settings.local_model_path}",
+        f"Selected model: {selected_model_id(settings)}",
         f"Learned examples: {len(learned)}",
         f"Recorded events: {len(events)}",
         f"Successful upgrades: {state.get('upgrade_count', 0)}",

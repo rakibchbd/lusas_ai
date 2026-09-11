@@ -9,6 +9,7 @@ from .agent import LusasAgent
 from .control import read as read_control, update as update_control
 from .dashboard import write as write_dashboard
 from .local_model import LocalModelError
+from .model_registry import catalog, get_model_spec, selected_model_id
 from .monitor import follow, report, snapshot
 from .service import install_service, remove_service, service_state
 from .updater import UpgradeResult, restore_backup
@@ -103,6 +104,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     chat_parser = subparsers.add_parser("chat", help="Chat with the local agent.")
     chat_parser.add_argument("prompt", nargs="*", help="One-shot prompt.")
+    chat_parser.add_argument(
+        "--model-id",
+        choices=("sara-1.0", "lira-1.0"),
+        help="Official model ID; omitted means the saved selector choice.",
+    )
     learn_parser = subparsers.add_parser(
         "learn",
         help="Add an approved instruction and answer to the next training cycle.",
@@ -142,8 +148,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _interactive_chat(agent: LusasAgent) -> None:
-    print("LUSAS AI local chat. Type /exit to quit.")
+def _interactive_chat(agent: LusasAgent, model_id: str | None = None) -> None:
+    selected = model_id or selected_model_id(agent.settings)
+    print(f"LUSAS AI local chat ({get_model_spec(selected).display_name}). Type /exit to quit.")
     while True:
         try:
             prompt = input("\nYou> ").strip()
@@ -154,7 +161,7 @@ def _interactive_chat(agent: LusasAgent) -> None:
             return
         if not prompt:
             continue
-        print("\nLUSAS AI> " + agent.chat(prompt))
+        print("\nLUSAS AI> " + agent.chat(prompt, model_id=model_id))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -163,7 +170,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "status":
-            print(f"Model:     {agent.settings.local_model_path}")
+            active_id = selected_model_id(agent.settings)
+            print(f"Model:     {get_model_spec(active_id).display_name} ({active_id})")
+            print(f"Models:    {json.dumps(catalog(agent.settings), sort_keys=True)}")
             print("Backend:   local LUSAS model")
             print(f"Workspace: {agent.workspace.root}")
             print(
@@ -265,9 +274,9 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "chat":
             if args.prompt:
-                print(agent.chat(" ".join(args.prompt)))
+                print(agent.chat(" ".join(args.prompt), model_id=args.model_id))
             else:
-                _interactive_chat(agent)
+                _interactive_chat(agent, model_id=args.model_id)
             return 0
 
         if args.command == "learn":

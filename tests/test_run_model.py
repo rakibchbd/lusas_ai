@@ -86,8 +86,7 @@ class TrainedModelIdentityTests(unittest.TestCase):
             "who is rakib",
             128,
         )
-        self.assertIn("Rakib Chowdhury", response)
-        self.assertNotIn("I am Rakib", response)
+        self.assertEqual(response, "Rakib Chowdhury is the creator and developer of LUSAS AI. Lusa is his childhood nickname.")
 
     def test_indirect_creator_question_gets_context_without_fixed_answer(self) -> None:
         response, formatted = self._generate("who the maker is?")
@@ -157,7 +156,9 @@ class TrainedModelIdentityTests(unittest.TestCase):
             "how many parameters do you have?",
             128,
         )
-        self.assertIn("0.5 billion parameters", response)
+        self.assertIn("Sara 1.0", response)
+        self.assertIn("Lira 1.0", response)
+        self.assertNotIn("100000000", response)
         self.assertEqual(tokenizer.formatted, "")
 
 

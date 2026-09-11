@@ -14,8 +14,10 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(settings.auto_model_upgrades)
         self.assertTrue(settings.evolution_enabled)
         self.assertTrue(settings.auto_code_upgrades)
-        self.assertTrue(settings.auto_apply_upgrades)
+        self.assertFalse(settings.auto_apply_upgrades)
         self.assertGreaterEqual(settings.model_upgrade_interval_minutes, 1)
+        self.assertEqual(settings.default_model_id, "sara-1.0")
+        self.assertEqual(settings.model_storage, "models")
 
     def test_config_paths_cannot_escape_project_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

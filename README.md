@@ -1,296 +1,174 @@
 # LUSAS AI
 
-LUSAS AI is being built as its own local model project, with a small agent
-runtime around it. The first practical model path is a LUSAS adapter trained
-from an open-weight coding model. It keeps model upgrades versioned, tested,
-and recoverable.
+LUSAS AI is a local-first model and agent platform. Its two official public
+models are `Sara 1.0` (`sara-1.0`) and `Lira 1.0` (`lira-1.0`). The runtime
+never silently substitutes a different model. Each official model can use an
+explicitly configured foundation model or local foundation path, while its
+public identity remains the official LUSAS name.
 
-The founder introduction is normalized into structured knowledge records. Those
-facts are retrieved only for relevant questions and supplied as context; they
-are not a system prompt or a fixed response template.
-
-Included:
-
-- bounded workspace for project files
-- local LUSAS model chat
-- approved-example and allowlisted web learning with automatic retraining
-- local LoRA fine-tuning pipeline for a LUSAS model
-- model candidate promotion with checkpoint backups
-- staged self-upgrades
-- pre-apply backups
-- tests, rollback-ready artifacts, native desktop notifications, and an
-  inspectable upgrade history
-- runtime emergency controls, self-audit records, evidence-based knowledge
-  gaps, a local knowledge graph, skill registry, evolution-cycle history, and
-  multidimensional scorecards
-
-The checked-in configuration enables automatic model evaluation, promotion, and
-guarded source evolution. Every model cycle trains a candidate, evaluates it,
-backs up the active model, and promotes it only when the evaluation passes.
-Software self-upgrades remain bounded to the agent, test, and training source
-directories and are subject to static security checks and the full test suite.
-
-Training a foundation model from zero requires a large curated dataset and
-substantial accelerator compute. This project starts with a local fine-tuned
-model so it can become yours on ordinary hardware, then leaves room for
-continued pretraining later.
+The project includes a local chat agent, persistent model selection, a gated
+knowledge pipeline, candidate training and evaluation, versioned deployment,
+backups, rollback, monitoring, audit logs, and a localhost administration
+dashboard.
 
 ## Quick start
 
-Install the local model dependencies and train a LUSAS candidate:
+Create the environment and install the training/runtime dependencies:
 
 ~~~text
+python3 -m venv .venv
+source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install -r training/requirements.txt
+~~~
+
+Configure each model explicitly. Use a model identifier available to your
+Transformers installation or a local foundation directory:
+
+~~~text
+export LUSAS_SARA_FOUNDATION_MODEL="your-approved-sara-foundation"
+export LUSAS_LIRA_FOUNDATION_MODEL="your-approved-lira-foundation"
+# Alternatively use LUSAS_SARA_FOUNDATION_PATH and/or LUSAS_LIRA_FOUNDATION_PATH.
+export LUSAS_ADMIN_TOKEN="choose-a-local-admin-secret"
+~~~
+
+Do not place tokens in `config.json`, source files, logs, or Git. A read-only
+`HF_TOKEN` may be used by the Transformers download path when the configured
+foundation requires it.
+
+## Train and run Sara or Lira
+
+Training accepts only clean, approved records. The foundation is required on
+every training command; there is no implicit default:
+
+~~~text
 python3 training/train_lora.py \
+  --model-id sara-1.0 \
   --data training/data/examples.jsonl \
-  --output models/candidates/first
-python3 -m lusas_ai status
+  --output models/sara-1.0/candidates/first \
+  --foundation-model "$LUSAS_SARA_FOUNDATION_MODEL"
 ~~~
 
-The same dependencies are available as the package extra `lusas-ai[training]`;
-the base package remains lightweight for status, learning, web refresh, and
-dashboard commands.
-
-Hugging Face access is read from the `HF_TOKEN` environment variable when it
-is available. The token is never stored in `config.json`, source files, logs,
-or Git. Public models work without a token, while a read-only token provides
-higher Hub rate limits and access to models your account is allowed to use:
+Evaluate a candidate. The evaluation includes accuracy, hallucination,
+safety, regression, English, Bengali, latency, and resource gates:
 
 ~~~text
-read -s HF_TOKEN
-export HF_TOKEN
+python3 training/evaluate_model.py \
+  --model-id sara-1.0 \
+  --model-path models/sara-1.0/candidates/first \
+  --data training/data/eval.jsonl
 ~~~
 
-Promote a candidate after evaluation, then run:
+The model selector in the web console persists the selected ID in
+`.lusas/selected_model.json`. The same selection can be used from the CLI:
 
 ~~~text
-python3 training/run_model.py --model models/production --interactive
-python3 -m lusas_ai status
-python3 -m lusas_ai chat
+python3 training/run_model.py --model-id sara-1.0 --interactive
+python3 -m lusas_ai chat --model-id lira-1.0
 ~~~
 
-Generation behavior is configurable in `config.json`: `temperature`, `top_p`,
-`top_k`, `repeat_penalty`, `num_ctx`, `num_predict`, and `seed` are available
-for the local model runtime. The defaults favor focused, repeatable coding
-answers.
+The interactive runner loads one selected model and accepts prompts until
+`/exit`. A missing model or missing foundation produces a clear error; it does
+not fall back to another model.
 
-Teach LUSAS explicitly with approved examples. They are stored locally as
-training examples and normalized knowledge records, then included in the next
-automatic training cycle:
+## Approval-gated deployment
+
+Every candidate must pass all eight evaluation gates. An administrator must
+then approve the exact candidate in the administration page or by calling the
+deployment API. Promotion creates a model-specific backup before replacing
+the stable artifact. Automatic cycles may train and evaluate candidates, but
+they cannot deploy them.
 
 ~~~text
-python3 -m lusas_ai learn \
-  --instruction "Who made you?" \
-  --output "I am Lusa, created by Rakib Chowdhury."
+python3 training/model_lifecycle.py promote \
+  --model-id sara-1.0 \
+  --candidate models/sara-1.0/candidates/first \
+  --evaluation models/sara-1.0/candidates/first/evaluation.json \
+  --approved-by administrator \
+  --admin-approved
 ~~~
 
-Monitor exactly what LUSAS has learned and when upgrades happen:
+Backups are stored below `models/<model-id>/backups/`. Roll back through the
+administration dashboard or:
 
 ~~~text
-python3 -m lusas_ai monitor
-python3 -m lusas_ai monitor --follow
+python3 training/model_lifecycle.py rollback \
+  --model-id sara-1.0 \
+  --backup models/sara-1.0/backups/<backup-directory>
 ~~~
 
-The monitor reads `.lusas/learned.jsonl` and `.lusas/notifications.jsonl`,
-shows learned instruction previews, and reports model-upgrade events. Stop live
-monitoring with `Ctrl-C`.
+## Local web console and administration
 
-The automatic model loop merges the built-in and learned examples, trains a
-candidate, evaluates it against the regression set, and promotes it only when
-all evaluation cases pass. It never replaces the production model with an
-untested candidate.
-
-Each worker cycle now records an evolution ID and performs a self-audit before
-research, learning, experimentation, testing, benchmarking, comparison, and
-monitoring. Evidence is stored locally in `.lusas/audits.jsonl`,
-`.lusas/knowledge.jsonl`, `.lusas/knowledge_gaps.jsonl`,
-`.lusas/skills.jsonl`, `.lusas/scorecards.jsonl`, and
-`.lusas/evolution_cycles.jsonl`. Unmeasured score dimensions remain `null`; a
-configuration setting is never presented as proof of intelligence or skill.
-
-LUSAS answers from its local model, approved local training data, configured
-local workspace, and optionally cached excerpts from explicitly allowlisted
-HTTPS feeds. The web collector runs on a schedule, stores only bounded text
-locally, and never executes downloaded content or sends prompts, credentials,
-or workspace files to a website. Hugging Face is used only to download model
-files during setup or training; inference itself runs locally.
-
-The starter training set includes varied human question forms—conversation,
-clarification, identity, explanations, coding, learning, and safety requests—so
-the model can learn patterns beyond one exact wording. It is a growing starter
-corpus, not a complete list of every question a person could ask; approved
-examples are merged into later training cycles.
-
-The default web sources are official release feeds for CPython and
-Hugging Face Transformers. Change `web_sources` and
-`web_allowed_domains` together in `config.json` to use other HTTPS feeds.
-Trigger a refresh manually with:
-
-~~~text
-python3 -m lusas_ai web-refresh --force
-~~~
-
-Upgrades remain local by design. The model, source changes, learned records,
-version state, and logs use the local filesystem. Web learning only reads the
-explicitly configured feeds; it does not publish to GitHub or use an external
-answer API, and it never sends prompts, credentials, or workspace files.
-
-The configured automatic model-upgrade interval is five minutes. Keep the
-continuous worker running with `python3 training/auto_upgrade.py`; each cycle
-refreshes the allowlisted web sources, incorporates new local records, and
-still trains and evaluates a candidate before promotion.
-
-Source evolution records a permanent JSONL history entry for every proposal,
-including its unified diff, quality metrics, and deployment result. Diffs are retained under
-`.lusas/upgrade-diffs/`, and progress events are retained in
-`.lusas/evolution-progress.jsonl`. Native notifications use `osascript` on
-macOS, `notify-send` on Linux, and a PowerShell Windows toast when available;
-missing desktop services are reported in the notification log without
-pretending delivery succeeded.
-
-Inspect the local, HTTP-free upgrade dashboard at any time:
-
-~~~text
-python3 -m lusas_ai report
-python3 -m lusas_ai report --json
-~~~
-
-Generate a browsable local HTML control dashboard from the same records:
-
-~~~text
-python3 -m lusas_ai dashboard
-open .lusas/dashboard.html
-~~~
-
-The dashboard shows version, policy, web-learning, lesson, regression, and
-upgrade-history summaries, knowledge freshness, open gaps, skills, runtime
-controls, and measured score evidence. It does not expose hidden model
-reasoning or grant new permissions.
-
-Run the interactive localhost web console:
+Start the localhost console:
 
 ~~~text
 python3 -m lusas_ai web
 open http://127.0.0.1:8765
 ~~~
 
-The console uses the same local model and agent as `python3 -m lusas_ai chat`,
-with live runtime metrics and recent system state. It binds to `127.0.0.1` by
-default, so the chat API is not exposed to the network. Open the URL above
-rather than the older `.lusas/dashboard.html` file. If `web/index.html` is
-opened directly, its styling still loads, but the localhost server must be
-running for status and chat requests. Stop the server with `Ctrl-C`.
+The chat request always contains the selected `model_id`. Open `/admin.html`
+and enter `LUSAS_ADMIN_TOKEN` to manage the two models, approve HTTPS sources,
+review and approve or reject collected records, start training jobs, approve
+deployments, roll back stable versions, and inspect jobs and audit events.
 
-Use the runtime controls when you need to stop or narrow autonomous behavior:
+## Knowledge and web learning
+
+Web learning is restricted to HTTPS sources in the configured administrator
+allowlist. Every fetched record is normalized, categorized, deduplicated, and
+scanned for prompt injection, shell payloads, credential theft, and script
+content. New records are quarantined as pending. They are never sent directly
+to training. Only a corroborated record explicitly approved by an
+administrator can enter the web-training queue.
+
+Configure `web_sources` and `web_allowed_domains` together in `config.json`,
+then approve the sources from `/admin.html` or refresh manually:
+
+~~~text
+python3 -m lusas_ai web-refresh --force
+~~~
+
+Local examples added with `python3 -m lusas_ai learn` are also cleaned and
+checked before a later training cycle. Knowledge is stored locally under
+`.lusas/` and the administration database is `.lusas/admin.sqlite3`; migration
+`migrations/001_admin.sql` creates the model, source, review, training,
+deployment-approval, and audit tables.
+
+## Automatic improvement and controls
+
+Run one cycle or keep the local worker running:
+
+~~~text
+python3 training/auto_upgrade.py --once
+python3 training/auto_upgrade.py
+~~~
+
+The cycle may gather approved web references and create a candidate for the
+configured default model. It records evaluation results and notifications,
+but leaves deployment in `staged` state until administrator approval. Source
+evolution is independently bounded to the project source/test/training paths,
+with backups and tests. Use runtime controls to pause learning, web research,
+upgrades, or self-code evolution:
 
 ~~~text
 python3 -m lusas_ai control status
-python3 -m lusas_ai control set-autonomy --level 3
 python3 -m lusas_ai control stop
 python3 -m lusas_ai control resume
-python3 -m lusas_ai control pause-learning
-python3 -m lusas_ai control pause-upgrades
-python3 -m lusas_ai control disable-web
-python3 -m lusas_ai control disable-self-code
-python3 -m lusas_ai control disable-auto-deploy
-python3 -m lusas_ai control lock
 ~~~
 
-`stop` pauses the worker's learning and upgrade loops. `resume` clears that
-emergency stop and resumes those two loops; other switches remain as they
-were. `lock` prevents automatic or manual deployment until `unlock` is used.
-Rollback remains available while production is locked.
-
-The `evolve` command prints each gate as it runs. The automatic local worker
-is configured to run model and source-code upgrades every five minutes after
-the macOS LaunchAgent is installed.
-
-Run the guarded code-evolution pipeline directly with:
-
-~~~text
-python3 -m lusas_ai evolve --goal "Improve parser reliability" --apply
-~~~
-
-With both `evolution_enabled` and `auto_code_upgrades` enabled, every scheduled
-worker cycle asks the current local LUSAS model to propose a small source-code
-improvement, even when model training is skipped because its inputs are
-unchanged. The
-guarded evolution pipeline analyzes the repository, validates protected paths,
-creates an isolated candidate workspace, runs standard-library AST security
-checks and the full unit-test suite, records quality metrics, and compares
-the candidate before deployment. Invalid, unsafe, or failing proposals are
-rejected and logged without stopping the next cycle. Candidates are limited to
-`lusas_ai/`, `tests/`, and `training/`, and rollback backups remain available
-under `.lusas/backups/`.
-
-The worker fingerprints its training and evaluation inputs. If nothing changed
-since the previous successful cycle, it records a `skipped` event instead of
-retraining the same data, making the five-minute schedule faster and reducing
-unnecessary heat, memory use, and model churn.
-
-Training now uses Apple MPS when available, larger batches on GPU/MPS, and
-disabled pinned memory on MPS where it is unsupported. A rejected candidate is
-also recorded as the current input result, so the same failed dataset is not
-retrained every five minutes until new data or evaluation inputs arrive.
-
-Every successful promotion increments the local LUSAS version by one patch step:
-`v0.001`, followed by `v0.002`, `v0.003`, and so on. Rejected candidates do not
-increment the version, but every attempt is recorded with its baseline score,
-candidate score, improvement, and learned-example count.
-
-View versions and upgrade history with:
-
-~~~text
-python3 -m lusas_ai monitor
-~~~
-
-To start the worker automatically when you log in on macOS, install the
-LaunchAgent once:
+Inspect the local report with `python3 -m lusas_ai report --json` or monitor
+events with `python3 -m lusas_ai monitor`. Install the macOS LaunchAgent only
+after reviewing the configuration:
 
 ~~~text
 python3 -m lusas_ai service install
 ~~~
 
-It starts at login, restarts after an exit, and uses `launchd`'s network-state
-keep-alive. Because macOS protects Documents from some background processes,
-the LaunchAgent writes logs to `~/Library/Logs/LUSAS_AI/`. The install command
-verifies that the worker is actually running; if macOS denies access to the
-Documents folder, it reports the failure instead of claiming success. Remove it
-with:
+## Project limits
 
-~~~text
-python3 -m lusas_ai service remove
-~~~
-
-To talk directly with the trained LUSAS model, first prepare and promote a
-candidate, then start the interactive model runner:
-
-~~~text
-python3 training/run_model.py --model models/production --interactive
-~~~
-
-Questions about the project's founder are answered from the relevant structured
-facts. The current local model is based on an open-weight coding model and
-fine-tuned locally.
-
-Prepare a self-upgrade:
-
-~~~text
-python3 -m lusas_ai self-upgrade --goal "Improve the CLI help text"
-~~~
-
-Apply a tested staged upgrade with the --apply flag.
-Backups and staged candidates are stored under .lusas/.
-
-Run one complete automatic model-upgrade cycle immediately with:
-
-~~~text
-python3 training/auto_upgrade.py --once
-~~~
-
-To restore one, pass its backup directory to:
-
-~~~text
-python3 -m lusas_ai rollback --backup .lusas/backups/<backup>
-~~~
+This repository supplies orchestration and model-adapter training, not a
+foundation model's weights. Sara 1.0 and Lira 1.0 therefore remain unavailable
+until their explicit foundation configuration, dependencies, approved data,
+and local artifacts are present. Training a capable model from zero requires a
+large lawful corpus and substantial accelerator resources. Automatic promotion
+is intentionally disabled until a human administrator approves a fully gated
+candidate.

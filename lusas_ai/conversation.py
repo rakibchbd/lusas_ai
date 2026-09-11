@@ -71,10 +71,16 @@ _CORRECTION = re.compile(
     r"you\s+misunderstood|let\s+me\s+clarify)[!?.\s]*$",
     re.IGNORECASE,
 )
+_BENGALI_GREETING = re.compile(r"^\s*(?:হ্যালো|হাই|নমস্কার)[!?.।\s]*$", re.IGNORECASE)
+_BENGALI_IDENTITY = re.compile(r"^\s*(?:তুমি কে|আপনার নাম কী|তোমার নাম কী)[!?.।\s]*$", re.IGNORECASE)
 
 
 def quick_response(prompt: str) -> str | None:
     """Return a stable response for a routine prompt, or None for model work."""
+    if _BENGALI_GREETING.fullmatch(prompt):
+        return "হ্যালো! আমি LUSAS AI। কীভাবে সাহায্য করতে পারি?"
+    if _BENGALI_IDENTITY.fullmatch(prompt):
+        return "আমি LUSAS AI, আপনার স্থানীয় সহকারী।"
     if _GREETING.fullmatch(prompt):
         return "Hello! I'm LUSAS AI. How can I help?"
     if _WELLBEING.fullmatch(prompt):
@@ -106,9 +112,9 @@ def quick_response(prompt: str) -> str | None:
         )
     if _PARAMETERS.fullmatch(prompt):
         return (
-            "The local base model is Qwen2.5-Coder-0.5B-Instruct, which has about "
-            "0.5 billion parameters. LUSAS also uses a small LoRA adapter containing "
-            "additional trained weights."
+            "Sara 1.0 and Lira 1.0 are the official LUSAS AI model names. Their "
+            "parameter counts depend on the explicitly configured foundation for "
+            "each model; LUSAS does not silently substitute another model."
         )
     if _CAPABILITIES.fullmatch(prompt):
         return (

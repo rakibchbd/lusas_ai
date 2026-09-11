@@ -39,7 +39,9 @@ def _autonomy_level(value: Any, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     root: Path
-    model_path: str = "models/production"
+    model_storage: str = "models"
+    default_model_id: str = "sara-1.0"
+    foundation_models: dict[str, dict[str, str]] | None = None
     learning_file: str = ".lusas/learned.jsonl"
     temperature: float = 0.0
     top_p: float = 1.0
@@ -76,6 +78,9 @@ class Settings:
     audits_file: str = ".lusas/audits.jsonl"
     scorecards_file: str = ".lusas/scorecards.jsonl"
     evolution_cycles_file: str = ".lusas/evolution_cycles.jsonl"
+    selected_model_file: str = ".lusas/selected_model.json"
+    admin_database_file: str = ".lusas/admin.sqlite3"
+    admin_token_env: str = "LUSAS_ADMIN_TOKEN"
 
     @property
     def workspace_root(self) -> Path:
@@ -97,7 +102,20 @@ class Settings:
 
         return cls(
             root=root,
-            model_path=_relative_setting(payload.get("model_path"), cls.model_path),
+            model_storage=_relative_setting(
+                payload.get("model_storage"), cls.model_storage
+            ),
+            default_model_id=(
+                payload.get("default_model_id", cls.default_model_id)
+                if payload.get("default_model_id", cls.default_model_id)
+                in {"sara-1.0", "lira-1.0"}
+                else cls.default_model_id
+            ),
+            foundation_models=(
+                payload.get("foundation_models")
+                if isinstance(payload.get("foundation_models"), dict)
+                else cls.foundation_models
+            ),
             learning_file=_relative_setting(
                 payload.get("learning_file"), cls.learning_file
             ),
@@ -197,11 +215,26 @@ class Settings:
             evolution_cycles_file=_relative_setting(
                 payload.get("evolution_cycles_file"), cls.evolution_cycles_file
             ),
+            selected_model_file=_relative_setting(
+                payload.get("selected_model_file"), cls.selected_model_file
+            ),
+            admin_database_file=_relative_setting(
+                payload.get("admin_database_file"), cls.admin_database_file
+            ),
+            admin_token_env=(
+                payload.get("admin_token_env", cls.admin_token_env)
+                if isinstance(payload.get("admin_token_env", cls.admin_token_env), str)
+                else cls.admin_token_env
+            ),
         )
 
     @property
-    def local_model_path(self) -> Path:
-        return (self.root / self.model_path).resolve()
+    def selected_model_path(self) -> Path:
+        return (self.root / self.selected_model_file).resolve()
+
+    @property
+    def admin_database_path(self) -> Path:
+        return (self.root / self.admin_database_file).resolve()
 
     @property
     def learning_path(self) -> Path:

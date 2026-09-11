@@ -1,5 +1,10 @@
 {
-  "model_path": "models/production",
+  "model_storage": "models",
+  "default_model_id": "sara-1.0",
+  "foundation_models": {
+    "sara-1.0": {"model": "", "path": ""},
+    "lira-1.0": {"model": "", "path": ""}
+  },
   "learning_file": ".lusas/learned.jsonl",
   "temperature": 0.0,
   "top_p": 1.0,
@@ -9,7 +14,7 @@
   "seed": 42,
   "workspace": "workspace",
   "autonomy_level": 5,
-  "auto_apply_upgrades": true,
+  "auto_apply_upgrades": false,
   "auto_model_upgrades": true,
   "auto_code_upgrades": true,
   "model_upgrade_interval_minutes": 5,
@@ -37,5 +42,8 @@
   "skills_file": ".lusas/skills.jsonl",
   "audits_file": ".lusas/audits.jsonl",
   "scorecards_file": ".lusas/scorecards.jsonl",
-  "evolution_cycles_file": ".lusas/evolution_cycles.jsonl"
+  "evolution_cycles_file": ".lusas/evolution_cycles.jsonl",
+  "selected_model_file": ".lusas/selected_model.json",
+  "admin_database_file": ".lusas/admin.sqlite3",
+  "admin_token_env": "LUSAS_ADMIN_TOKEN"
 }

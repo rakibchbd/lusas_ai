@@ -69,6 +69,8 @@ class WebLearningTests(unittest.TestCase):
                         "title": "Transformers release",
                         "url": "https://example.com/release",
                         "summary": "The transformers library added a feature.",
+                        "approval_status": "approved",
+                        "verification_status": "corroborated",
                     }
                 )
                 + "\n",
@@ -77,7 +79,7 @@ class WebLearningTests(unittest.TestCase):
             result = context(settings, "What changed in transformers?")
             self.assertIn("Transformers release", result)
             self.assertIn("added a feature", result)
-            self.assertIn("unverified", result)
+            self.assertIn("Approved web reference", result)
 
     def test_definition_question_does_not_get_release_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -109,8 +111,10 @@ class WebLearningTests(unittest.TestCase):
                         {
                             "id": str(index),
                             "title": "performance update",
-                            "url": "https://example.com/update",
-                            "summary": "x" * 3_000,
+                        "url": "https://example.com/update",
+                        "summary": "x" * 3_000,
+                        "approval_status": "approved",
+                        "verification_status": "corroborated",
                         }
                     )
                     for index in range(3)

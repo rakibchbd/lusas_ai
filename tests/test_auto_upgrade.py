@@ -64,7 +64,7 @@ class AutomaticUpgradeTests(unittest.TestCase):
             ):
                 result = auto_upgrade.run_once(root)
 
-            self.assertEqual(result["model_upgrade"]["status"], "skipped")
+            self.assertEqual(result["model_upgrade"]["status"], "disabled")
             self.assertEqual(result["code_upgrade"]["status"], "rejected")
             self.assertEqual(result["status"], "rejected")
 

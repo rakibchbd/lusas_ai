@@ -31,7 +31,10 @@ class ConversationTests(unittest.TestCase):
 
     def test_user_identity_and_parameter_questions(self) -> None:
         self.assertIn("Rakib Chowdhury", quick_response("do you know me?") or "")
-        self.assertIn("0.5 billion parameters", quick_response("how many peremeter do you have?") or "")
+        response = quick_response("how many peremeter do you have?") or ""
+        self.assertIn("Sara 1.0", response)
+        self.assertIn("Lira 1.0", response)
+        self.assertNotIn("100000000", response)
 
     def test_specific_questions_still_use_the_model(self) -> None:
         self.assertIsNone(quick_response("What is Python?"))

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c111d">
+  <title>LUSAS AI · Administration</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="admin-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="LUSAS AI home">
+        <span class="brand-mark">L</span>
+        <span><span class="brand-name">LUSAS AI</span><span class="brand-caption">ADMINISTRATION</span></span>
+      </a>
+      <div class="topbar-actions"><a class="admin-link" href="/">Chat</a><span class="connection-status" id="admin-status">ADMIN SIGN-IN REQUIRED</span></div>
+    </header>
+
+    <main class="admin-content">
+      <section class="admin-intro">
+        <div><div class="eyebrow">CONTROL CENTER</div><h1>Model operations.</h1><p>Review data, run gated training, approve deployments, and keep Sara 1.0 and Lira 1.0 recoverable.</p></div>
+        <div class="admin-auth"><label for="admin-token">Administrator token</label><input id="admin-token" type="password" autocomplete="off" placeholder="LUSAS_ADMIN_TOKEN"><button id="save-token" class="send-button" type="button">Save token</button></div>
+      </section>
+
+      <section class="admin-section"><div class="section-heading"><div><div class="eyebrow">MODEL REGISTRY</div><h2>Official models</h2></div><button class="clear-button" id="refresh-admin" type="button">Refresh</button></div><div class="model-cards" id="model-cards"></div><h2>Candidate comparison</h2><div class="table-wrap"><table><thead><tr><th>Model</th><th>Candidate</th><th>Score</th><th>All gates</th><th>Latency / RSS</th></tr></thead><tbody id="candidate-rows"><tr><td colspan="5">Sign in to load candidates.</td></tr></tbody></table></div></section>
+
+      <section class="admin-section"><div class="section-heading"><div><div class="eyebrow">KNOWLEDGE GATE</div><h2>Gathered information</h2></div></div><div class="source-form"><input id="source-url" type="url" placeholder="https://approved.example/feed.xml"><button class="clear-button" id="approve-source" type="button">Approve HTTPS source</button></div><div class="source-list" id="approved-sources"></div><div class="table-wrap"><table><thead><tr><th>Record</th><th>Category</th><th>Source / safety</th><th>Approval</th><th>Action</th></tr></thead><tbody id="knowledge-rows"><tr><td colspan="5">Sign in to load records.</td></tr></tbody></table></div></section>
+
+      <section class="admin-section admin-columns">
+        <div><div class="eyebrow">TRAINING PIPELINE</div><h2>Jobs</h2><div id="training-jobs" class="stack-list"><p>Sign in to load jobs.</p></div></div>
+        <div><div class="eyebrow">DEPLOYMENT CONTROL</div><h2>Approve or rollback</h2><form id="deployment-form" class="admin-form"><label>Model<select id="deployment-model"><option value="sara-1.0">Sara 1.0</option><option value="lira-1.0">Lira 1.0</option></select></label><label>Candidate path<input id="candidate-path" required placeholder="models/sara-1.0/candidates/run"></label><label>Evaluation JSON<textarea id="evaluation-json" rows="5" required>{"passed":true,"gates":{"accuracy":true,"hallucination":true,"safety":true,"regression":true,"english":true,"bengali":true,"latency":true,"resources":true}}</textarea></label><div class="form-actions"><button class="send-button" type="button" id="approve-deployment">Approve</button><button class="clear-button" type="button" id="deploy-approved">Deploy approved</button></div></form><form id="rollback-form" class="admin-form"><label>Backup path<input id="backup-path" required placeholder="models/sara-1.0/backups/..."></label><button class="clear-button" type="submit">Rollback</button></form></div>
+      </section>
+
+      <section class="admin-section"><div class="eyebrow">AUDIT TRAIL</div><h2>Recent activity</h2><div id="audit-events" class="stack-list"><p>Sign in to load events.</p></div></section>
+    </main>
+  </div>
+  <script src="admin.js" defer></script>
+</body>
+</html>

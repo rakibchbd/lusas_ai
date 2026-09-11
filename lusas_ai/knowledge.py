@@ -300,6 +300,10 @@ def upsert_web(settings: Settings, articles: list[dict[str, str]]) -> int:
         verification = article.get("verification_status", "unverified")
         observed = article.get("fetched_at") or now.isoformat()
         previous = existing.get(article_id)
+        approval_status = article.get(
+            "approval_status",
+            previous.get("approval_status", "pending") if previous else "pending",
+        )
         previous_observed = previous.get("observed_at") if previous else None
         expires_at = (
             previous.get("expires_at")
@@ -326,6 +330,13 @@ def upsert_web(settings: Settings, articles: list[dict[str, str]]) -> int:
             "expires_at": expires_at,
             "verification": verification,
             "verification_status": verification,
+            "approval_status": approval_status,
+            "reviewed_by": article.get("reviewed_by", previous.get("reviewed_by") if previous else None),
+            "reviewed_at": article.get("reviewed_at", previous.get("reviewed_at") if previous else None),
+            "category": article.get("category", "general"),
+            "malicious_findings": article.get("malicious_findings", []),
+            "malicious": bool(article.get("malicious", False)),
+            "trainable": False,
             "confidence": _confidence(verification),
             "related_topics": [],
             "dependencies": [],
@@ -428,7 +439,11 @@ def _retrieve_records(
     for item in source_records:
         if (
             item.get("kind") == "web_evidence"
-            and not query_terms.intersection(_RESEARCH_TERMS)
+            and (
+                not query_terms.intersection(_RESEARCH_TERMS)
+                or item.get("approval_status") != "approved"
+                or item.get("verification_status") not in {"corroborated", "admin_approved"}
+            )
         ):
             continue
         if item.get("scope") == "personal_identity" and not identity_query:
@@ -568,6 +583,11 @@ def _person_identity_fallback(query: str, supplied_context: str) -> str:
             "systems engineering, servers, hosting, deployment, and backend technologies."
         )
     return " ".join(parts) or "I don't know that detail yet."
+
+
+def known_person_response(query: str, supplied_context: str) -> str:
+    """Answer a known personal-identity question from structured facts only."""
+    return _person_identity_fallback(query, supplied_context)
 
 
 def needs_response_repair(
