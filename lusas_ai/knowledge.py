@@ -111,11 +111,15 @@ _UNSUPPORTED_PERSONAL_CLAIMS = (
     "lives in",
     "startup",
     "based in",
+    "based",
     "headquartered",
     "located in",
     "company",
     "platform",
     "known for",
+    "founded in",
+    "established in",
+    "organization",
 )
 _CONTRADICTORY_IDENTITY_CLAIMS = (
     "he was created",
@@ -138,12 +142,12 @@ def _identity_sentence_is_supported(sentence: str, supplied_context: str) -> boo
     """Reject unsupported dates, places, and organization claims in biographies."""
     sentence_lower = sentence.lower()
     context_lower = supplied_context.lower()
+    sentence_years = set(_YEAR.findall(sentence))
+    context_years = set(_YEAR.findall(supplied_context))
+    if sentence_years and not sentence_years.issubset(context_years):
+        return False
 
     if "born" in sentence_lower or "birth" in sentence_lower:
-        sentence_years = set(_YEAR.findall(sentence))
-        context_years = set(_YEAR.findall(supplied_context))
-        if sentence_years and not sentence_years.issubset(context_years):
-            return False
         sentence_location = _BIRTH_LOCATION.search(sentence)
         context_location = _BIRTH_LOCATION.search(supplied_context)
         if sentence_location and context_location:

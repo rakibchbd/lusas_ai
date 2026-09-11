@@ -66,6 +66,23 @@ class AgentIdentityTests(unittest.TestCase):
             self.assertNotIn("Mumbai", response)
             self.assertNotIn("company", response.lower())
 
+    def test_quality_layer_drops_unsupported_founding_claims(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            from lusas_ai.knowledge import context as knowledge_context
+
+            supplied = knowledge_context(agent.settings, "who is Rakib Chowdhury?")
+            response = clean_model_response(
+                "Rakib Chowdhury is a Bangladesh-based AI founder and creator. "
+                "LUSAS AI was founded in 2010 by Lusa Chowdhury, and he is a founder of the LUSAS AI organization.",
+                prompt="who is Rakib Chowdhury?",
+                supplied_context=supplied,
+            )
+            self.assertIn("creator", response.lower())
+            self.assertNotIn("founded in 2010", response.lower())
+            self.assertNotIn("organization", response.lower())
+            self.assertNotIn("based", response.lower())
+
     def test_creator_question_is_generated_from_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))
