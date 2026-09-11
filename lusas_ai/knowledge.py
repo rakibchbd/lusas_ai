@@ -52,6 +52,32 @@ SEED_FACTS: tuple[dict[str, Any], ...] = (
         ],
         "related_topics": ["background", "Python", "machine learning", "Systems Engineer"],
     },
+    {
+        "knowledge_id": "lusas-founder-profile",
+        "topic": "Rakib Chowdhury personal profile",
+        "content": "Rakib Chowdhury was born on November 15, 1999, in Darshana Mor, Rangpur City, Bangladesh. His work includes web development, Python, machine learning, systems engineering, servers, hosting, deployment, and backend technologies.",
+        "facts": [
+            {
+                "subject": "Rakib Chowdhury",
+                "relation": "birth_date",
+                "object": "November 15, 1999",
+            },
+            {
+                "subject": "Rakib Chowdhury",
+                "relation": "birth_place",
+                "object": "Darshana Mor, Rangpur City, Bangladesh",
+            },
+        ],
+        "related_topics": [
+            "profile",
+            "born",
+            "birth",
+            "November 15, 1999",
+            "Darshana Mor",
+            "Rangpur City",
+            "Bangladesh",
+        ],
+    },
 )
 
 
@@ -84,6 +110,12 @@ _UNSUPPORTED_PERSONAL_CLAIMS = (
     "known for",
     "lives in",
     "startup",
+    "based in",
+    "headquartered",
+    "located in",
+    "company",
+    "platform",
+    "known for",
 )
 _CONTRADICTORY_IDENTITY_CLAIMS = (
     "he was created",
@@ -95,6 +127,42 @@ _INCOMPLETE_ENDINGS = re.compile(
     r"\b(?:also|and|or|the|a|an|to|of|in|for|with|has|have)$",
     re.IGNORECASE,
 )
+_YEAR = re.compile(r"\b(?:18|19|20)\d{2}\b")
+_BIRTH_LOCATION = re.compile(
+    r"\b(?:born|birth)\b.*?\bin\s+([^.!?]+)",
+    re.IGNORECASE,
+)
+
+
+def _identity_sentence_is_supported(sentence: str, supplied_context: str) -> bool:
+    """Reject unsupported dates, places, and organization claims in biographies."""
+    sentence_lower = sentence.lower()
+    context_lower = supplied_context.lower()
+
+    if "born" in sentence_lower or "birth" in sentence_lower:
+        sentence_years = set(_YEAR.findall(sentence))
+        context_years = set(_YEAR.findall(supplied_context))
+        if sentence_years and not sentence_years.issubset(context_years):
+            return False
+        sentence_location = _BIRTH_LOCATION.search(sentence)
+        context_location = _BIRTH_LOCATION.search(supplied_context)
+        if sentence_location and context_location:
+            sentence_tokens = set(_terms(sentence_location.group(1)))
+            context_tokens = set(_terms(context_location.group(1)))
+            if len(sentence_tokens.intersection(context_tokens)) < 2:
+                return False
+
+    for marker in (
+        "based in",
+        "headquartered",
+        "located in",
+        "company",
+        "platform",
+        "known for",
+    ):
+        if marker in sentence_lower and marker not in context_lower:
+            return False
+    return True
 
 
 def _read(path: Path) -> list[dict[str, Any]]:
@@ -441,6 +509,10 @@ def ground_response(query: str, response: str, supplied_context: str) -> str:
         if (
             is_person_identity_question(query)
             and FIRST_PERSON_PERSON_IDENTIFICATION.search(sentence)
+        ):
+            continue
+        if is_person_identity_question(query) and not _identity_sentence_is_supported(
+            sentence, supplied_context
         ):
             continue
         if any(

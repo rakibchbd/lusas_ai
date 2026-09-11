@@ -47,6 +47,25 @@ class AgentIdentityTests(unittest.TestCase):
             )
             self.assertEqual(response, "Lusa Chowdhury is the founder of LUSAS AI.")
 
+    def test_quality_layer_drops_conflicting_biography_and_company_claims(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            from lusas_ai.knowledge import context as knowledge_context
+
+            supplied = knowledge_context(agent.settings, "who is Rakib Chowdhury?")
+            response = clean_model_response(
+                "Rakib Chowdhury is the creator of LUSAS AI. "
+                "He was born on October 1, 1990, in Lusa, New York City, and is known for his work in web development. "
+                "Rakib Chowdhury is a founder and creator of a web development company based in Mumbai, India.",
+                prompt="who is Rakib Chowdhury?",
+                supplied_context=supplied,
+            )
+            self.assertIn("creator of LUSAS AI", response)
+            self.assertNotIn("October 1, 1990", response)
+            self.assertNotIn("New York City", response)
+            self.assertNotIn("Mumbai", response)
+            self.assertNotIn("company", response.lower())
+
     def test_creator_question_is_generated_from_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))

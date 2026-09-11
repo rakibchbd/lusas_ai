@@ -23,6 +23,9 @@ class KnowledgeTests(unittest.TestCase):
             self.assertFalse(
                 any(item["scope"] == "personal_identity" for item in retrieve(settings, "What is Python?"))
             )
+            profile = next(item for item in seeded if item["knowledge_id"] == "lusas-founder-profile")
+            self.assertEqual(profile["facts"][0]["relation"], "birth_date")
+            self.assertIn("Darshana Mor", profile["content"])
 
     def test_learning_is_incremental_and_deduplicated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
