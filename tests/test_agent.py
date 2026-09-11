@@ -255,6 +255,23 @@ class AgentIdentityTests(unittest.TestCase):
             self.assertNotIn("requests", response)
             self.assertNotIn("https://", response)
 
+    def test_unknown_person_question_does_not_reach_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+
+            class FailingModel:
+                def chat(self, prompt: str) -> str:
+                    raise AssertionError("unknown person should be handled without generation")
+
+            agent.model = FailingModel()
+            response = agent.chat("who is abrar")
+            self.assertEqual(
+                response,
+                "I don't have verified information about Abrar yet. "
+                "What would you like to know?",
+            )
+            self.assertNotIn("LUSAS AI", response)
+
     def test_common_personal_questions_use_model_response(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))

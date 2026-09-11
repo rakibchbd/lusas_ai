@@ -117,6 +117,23 @@ class TrainedModelIdentityTests(unittest.TestCase):
         )
         self.assertEqual(tokenizer.formatted, "")
 
+    def test_unknown_person_question_is_clarified_without_generation(self) -> None:
+        tokenizer = self.FakeTokenizer()
+        response = generate_loaded(
+            self.FakeTorch(),
+            tokenizer,
+            self.FakeModel(),
+            "cpu",
+            "who is abrar",
+            128,
+        )
+        self.assertEqual(
+            response,
+            "I don't have verified information about Abrar yet. "
+            "What would you like to know?",
+        )
+        self.assertEqual(tokenizer.formatted, "")
+
 
 if __name__ == "__main__":
     unittest.main()

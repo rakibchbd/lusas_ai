@@ -62,6 +62,24 @@ _NAME_INPUT_EXCLUSIONS = {
     "why",
     "write",
 }
+_PERSON_QUESTION_EXCLUSIONS = _NAME_INPUT_EXCLUSIONS | {
+    "chatgpt",
+    "docker",
+    "github",
+    "java",
+    "javascript",
+    "linux",
+    "macos",
+    "model",
+    "openai",
+    "rust",
+    "system",
+    "typescript",
+}
+_WHO_IS_PERSON = re.compile(
+    r"^\s*who\s+is\s+((?:[A-Za-z][A-Za-z.'’-]{1,}\s*){1,4})[?.!,]*$",
+    re.IGNORECASE,
+)
 
 
 _INTERNAL_TAIL = re.compile(
@@ -105,5 +123,26 @@ def ambiguous_name_response(prompt: str) -> str:
     name = " ".join(
         word[:1].upper() + word[1:]
         for word in prompt.strip().rstrip("?.!,").split()
+    )
+    return f"I don't have verified information about {name} yet. What would you like to know?"
+
+
+def unknown_person_subject(prompt: str) -> str | None:
+    """Return an unsupported person's name from a simple identity question."""
+    match = _WHO_IS_PERSON.fullmatch(prompt)
+    if not match:
+        return None
+    subject = " ".join(match.group(1).split())
+    if any(word.lower() in _PERSON_QUESTION_EXCLUSIONS for word in subject.split()):
+        return None
+    return subject
+
+
+def unknown_person_response(prompt: str) -> str:
+    """Ask for context instead of letting the model invent a person's identity."""
+    subject = unknown_person_subject(prompt) or "that person"
+    name = " ".join(
+        word[:1].upper() + word[1:]
+        for word in subject.rstrip("?.!,").split()
     )
     return f"I don't have verified information about {name} yet. What would you like to know?"

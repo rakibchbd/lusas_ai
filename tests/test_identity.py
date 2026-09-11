@@ -7,6 +7,8 @@ from lusas_ai.identity import (
     is_ambiguous_name_prompt,
     is_creator_question,
     is_person_identity_question,
+    unknown_person_response,
+    unknown_person_subject,
 )
 
 
@@ -44,6 +46,14 @@ class IdentityIntentTests(unittest.TestCase):
             "I don't have verified information about Rakin Hasan yet. What would you like to know?",
         )
         self.assertFalse(is_ambiguous_name_prompt("Write a Python function"))
+
+    def test_unknown_person_question_is_detected_without_guessing(self) -> None:
+        self.assertEqual(unknown_person_subject("who is abrar"), "abrar")
+        self.assertEqual(
+            unknown_person_response("who is abrar"),
+            "I don't have verified information about Abrar yet. What would you like to know?",
+        )
+        self.assertIsNone(unknown_person_subject("Who is Python?"))
 
 
 if __name__ == "__main__":
