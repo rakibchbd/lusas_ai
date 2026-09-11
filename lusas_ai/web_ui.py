@@ -43,6 +43,10 @@ class LusasRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if self.path.startswith("/api/"):
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
@@ -54,6 +58,19 @@ class LusasRequestHandler(BaseHTTPRequestHandler):
 
     def _error(self, status: HTTPStatus, message: str) -> None:
         self._send_json(status, {"error": message})
+
+    def do_OPTIONS(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
+        if urlsplit(self.path).path != "/api/chat":
+            self._error(HTTPStatus.NOT_FOUND, "Not found")
+            return
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Length", "0")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
 
     def do_GET(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
         path = urlsplit(self.path).path

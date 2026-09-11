@@ -4,6 +4,7 @@ const promptInput = document.querySelector("#prompt-input");
 const sendButton = document.querySelector("#send-button");
 const connectionStatus = document.querySelector("#connection-status");
 const coreState = document.querySelector("#core-state");
+const API_BASE = window.location.protocol === "file:" ? "http://127.0.0.1:8765" : "";
 
 function setText(selector, value) {
   const element = document.querySelector(selector);
@@ -35,7 +36,7 @@ function updateStatus(payload) {
 
 async function refreshStatus() {
   try {
-    const response = await fetch("/api/status", { cache: "no-store" });
+    const response = await fetch(`${API_BASE}/api/status`, { cache: "no-store" });
     if (!response.ok) throw new Error("Status request failed");
     updateStatus(await response.json());
     setConnection(true);
@@ -83,7 +84,7 @@ async function sendMessage(rawPrompt) {
   const pending = addMessage("assistant", "Thinking…", true);
   setBusy(true);
   try {
-    const response = await fetch("/api/chat", {
+    const response = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt }),

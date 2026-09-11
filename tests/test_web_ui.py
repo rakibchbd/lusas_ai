@@ -40,7 +40,7 @@ class WebUiTests(unittest.TestCase):
         content = response.read().decode("utf-8")
         self.assertEqual(response.status, 200)
         self.assertIn("LUSAS AI", content)
-        self.assertIn("/styles.css", content)
+        self.assertIn("styles.css", content)
 
         self.connection.request("GET", "/api/health")
         response = self.connection.getresponse()
