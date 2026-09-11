@@ -28,6 +28,9 @@ class MonitorTests(unittest.TestCase):
             )
             payload = report(settings)
             self.assertEqual(payload["recent_progress"][0]["phase"], "tests")
+            self.assertIn("continuous", payload)
+            self.assertIn("queued_interactions", payload["continuous"]["counts"])
+            self.assertGreaterEqual(len(payload["capability_graph"]["nodes"]), 1)
 
 
 if __name__ == "__main__":

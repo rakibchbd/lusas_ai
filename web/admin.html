@@ -32,6 +32,8 @@
         <div><div class="eyebrow">DEPLOYMENT CONTROL</div><h2>Approve or rollback</h2><form id="deployment-form" class="admin-form"><label>Model<select id="deployment-model"><option value="sara-1.0">Sara 1.0</option><option value="lira-1.0">Lira 1.0</option></select></label><label>Candidate path<input id="candidate-path" required placeholder="models/sara-1.0/candidates/run"></label><label>Evaluation JSON<textarea id="evaluation-json" rows="5" required>{"passed":true,"gates":{"accuracy":true,"hallucination":true,"safety":true,"regression":true,"english":true,"bengali":true,"latency":true,"resources":true}}</textarea></label><div class="form-actions"><button class="send-button" type="button" id="approve-deployment">Approve</button><button class="clear-button" type="button" id="deploy-approved">Deploy approved</button></div></form><form id="rollback-form" class="admin-form"><label>Backup path<input id="backup-path" required placeholder="models/sara-1.0/backups/..."></label><button class="clear-button" type="submit">Rollback</button></form></div>
       </section>
 
+      <section class="admin-section"><div class="eyebrow">CONTINUOUS ENGINE</div><h2>Learning operations</h2><div id="continuous-summary" class="stack-list"><p>Sign in to load maintenance state.</p></div></section>
+
       <section class="admin-section"><div class="eyebrow">AUDIT TRAIL</div><h2>Recent activity</h2><div id="audit-events" class="stack-list"><p>Sign in to load events.</p></div></section>
     </main>
   </div>

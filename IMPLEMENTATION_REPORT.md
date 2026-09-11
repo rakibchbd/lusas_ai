@@ -73,6 +73,8 @@ Created:
 - `lusas_ai/data_pipeline.py`
 - `lusas_ai/admin_db.py`
 - `migrations/001_admin.sql`
+- `migrations/002_continuous_learning.sql`
+- `lusas_ai/continuous.py`
 - `web/admin.html`
 - `web/admin.js`
 - `tests/test_model_registry.py`
@@ -83,8 +85,9 @@ Created:
 Updated:
 
 - `config.json`, `README.md`, `training/README.md`, and training datasets
-- `lusas_ai/config.py`, `agent.py`, `conversation.py`, `knowledge.py`,
-  `local_model.py`, `monitor.py`, `web_learning.py`, and `web_ui.py`
+- `lusas_ai/config.py`, `admin_db.py`, `agent.py`, `conversation.py`,
+  `knowledge.py`, `local_model.py`, `monitor.py`, `web_learning.py`, and
+  `web_ui.py`
 - `training/train_lora.py`, `evaluate_model.py`, `run_model.py`,
   `model_lifecycle.py`, and `auto_upgrade.py`
 - `web/index.html`, `web/app.js`, and `web/styles.css`
@@ -147,7 +150,7 @@ Run the web UI with `python3 -m lusas_ai web`, then open
 
 ## Verification
 
-- Python unit/integration suite: **99 tests passed**.
+- Python unit/integration suite: **104 tests passed**.
 - Python bytecode compilation: passed.
 - `web/app.js` and `web/admin.js` syntax checks: passed.
 - Config and training JSON/JSONL validation: passed.
@@ -155,6 +158,9 @@ Run the web UI with `python3 -m lusas_ai web`, then open
   the selected ID; known founder questions returned grounded third-person
   answers; unknown people did not trigger scraping or code generation; both
   model selections answered `67+87` locally as `154` without installed weights.
+- Continuous-cycle evidence: incremental input fingerprints, four successful
+  knowledge-retention checks, durable interaction/research/task tables, and
+  real process RSS/disk-budget measurements are recorded under `.lusas/`.
 - Visual browser check: selector, active-model label, Admin link, and redesigned
   dark console rendered correctly.
 
@@ -165,6 +171,10 @@ Run the web UI with `python3 -m lusas_ai web`, then open
   artifacts are provided.
 - Real training and evaluation require the optional ML dependencies and enough
   CPU/GPU/MPS memory.
+- A complete model-learning cycle cannot train or promote until each model has
+  an explicit foundation and approved data. Without those prerequisites the
+  worker records a blocked/failed result and continues its safe maintenance,
+  research, practice, and audit work.
 - Automatic learning stages candidates but requires an administrator for the
   final deployment approval, by design.
 - Web learning and fallback research use only configured and approved HTTPS

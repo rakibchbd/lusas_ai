@@ -129,6 +129,36 @@ function setBusy(busy) {
   sendButton.querySelector("span").textContent = busy ? "Thinking" : "Send";
 }
 
+async function submitFeedback(message, interactionId, feedback) {
+  const controls = message.querySelector(".message-feedback");
+  try {
+    const response = await fetch(`${API_BASE}/api/chat/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interaction_id: interactionId, feedback }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Feedback could not be saved.");
+    controls.textContent = "Feedback queued for the next learning cycle.";
+  } catch (error) {
+    controls.textContent = error.message;
+  }
+}
+
+function attachFeedback(message, interactionId) {
+  if (!interactionId || message.querySelector(".message-feedback")) return;
+  const controls = document.createElement("div");
+  controls.className = "message-feedback";
+  controls.innerHTML = '<button type="button" data-feedback="Helpful">Helpful</button><button type="button" data-feedback="Needs correction">Needs correction</button>';
+  controls.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", () => {
+      controls.querySelectorAll("button").forEach((item) => { item.disabled = true; });
+      submitFeedback(message, interactionId, button.dataset.feedback || "User feedback");
+    });
+  });
+  message.querySelector(".message-body").appendChild(controls);
+}
+
 async function sendMessage(rawPrompt) {
   const prompt = rawPrompt.trim();
   if (!prompt || sendButton.disabled) return;
@@ -148,6 +178,7 @@ async function sendMessage(rawPrompt) {
     if (!response.ok) throw new Error(payload.error || "The local model could not answer.");
     pending.classList.remove("pending");
     pending.querySelector("p").textContent = payload.response;
+    attachFeedback(pending, payload.interaction_id);
     const modelLabel = modelNames[payload.model_id] || modelNames[selectedModelId] || "LOCAL MODEL";
     const meta = pending.querySelector(".message-meta span");
     if (meta) meta.textContent = `${modelLabel} · LOCAL MODEL`;

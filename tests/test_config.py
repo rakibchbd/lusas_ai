@@ -14,6 +14,8 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(settings.auto_model_upgrades)
         self.assertTrue(settings.evolution_enabled)
         self.assertTrue(settings.auto_code_upgrades)
+        self.assertTrue(settings.continuous_learning_enabled)
+        self.assertEqual(settings.background_max_concurrent_jobs, 1)
         self.assertFalse(settings.auto_apply_upgrades)
         self.assertGreaterEqual(settings.model_upgrade_interval_minutes, 1)
         self.assertEqual(settings.default_model_id, "sara-1.0")

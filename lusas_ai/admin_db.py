@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from hashlib import sha256
 import json
 from pathlib import Path
 import sqlite3
 import threading
 from typing import Any
+import uuid
 from urllib.parse import urlparse
 
 from .data_pipeline import approved_training_records
@@ -74,6 +76,209 @@ class AdminStore:
                 (action, subject, json.dumps(details, ensure_ascii=True), actor, _now()),
             )
 
+    def record_interaction(
+        self,
+        model_id: str,
+        question: str,
+        answer: str,
+        *,
+        knowledge_used: bool = False,
+        web_search_used: bool = False,
+        sources: list[str] | None = None,
+        confidence: float | None = None,
+    ) -> dict[str, Any]:
+        """Persist a served answer for asynchronous quality and gap analysis."""
+        get_model_spec(model_id)
+        created_at = _now()
+        interaction_id = f"interaction-{uuid.uuid4().hex}"
+        source_list = [str(item) for item in (sources or []) if str(item).strip()]
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO interaction_events(
+                   interaction_id, model_id, question, answer, knowledge_used,
+                   web_search_used, sources, confidence, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    interaction_id,
+                    model_id,
+                    question[:8_000],
+                    answer[:20_000],
+                    int(knowledge_used),
+                    int(web_search_used),
+                    json.dumps(source_list, ensure_ascii=True),
+                    confidence,
+                    created_at,
+                ),
+            )
+        return {
+            "interaction_id": interaction_id,
+            "model_id": model_id,
+            "status": "queued",
+            "created_at": created_at,
+        }
+
+    def pending_interactions(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM interaction_events WHERE status = 'queued' ORDER BY created_at LIMIT ?",
+                (max(1, min(100, int(limit))),),
+            ).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["sources"] = json.loads(item.get("sources", "[]"))
+            except (TypeError, json.JSONDecodeError):
+                item["sources"] = []
+            result.append(item)
+        return result
+
+    def complete_interaction(
+        self,
+        interaction_id: str,
+        *,
+        status: str = "processed",
+        answer_quality: str = "unrated",
+        confidence: float | None = None,
+        feedback: str | None = None,
+    ) -> None:
+        if status not in {"processed", "failed", "needs_review"}:
+            raise ValueError("Invalid interaction status.")
+        with self._connect() as connection:
+            connection.execute(
+                """UPDATE interaction_events SET status = ?, answer_quality = ?,
+                   confidence = COALESCE(?, confidence), feedback = ?, processed_at = ?
+                   WHERE interaction_id = ?""",
+                (status, answer_quality, confidence, feedback, _now(), interaction_id),
+            )
+
+    def add_interaction_feedback(self, interaction_id: str, feedback: str) -> None:
+        feedback = feedback.strip()
+        if not feedback:
+            raise ValueError("Feedback cannot be empty.")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE interaction_events SET feedback = ?, status = 'queued',
+                   answer_quality = 'needs_review', processed_at = NULL
+                   WHERE interaction_id = ?""",
+                (feedback[:4_000], interaction_id),
+            )
+        if cursor.rowcount != 1:
+            raise ValueError("Interaction was not found.")
+
+    def record_practice(
+        self,
+        knowledge_id: str,
+        task: str,
+        status: str,
+        score: float,
+        evidence: dict[str, Any],
+    ) -> dict[str, Any]:
+        if status not in {"passed", "failed"}:
+            raise ValueError("Practice status must be passed or failed.")
+        run_id = f"practice-{uuid.uuid4().hex}"
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO practice_runs(run_id, knowledge_id, task, status, score, evidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (run_id, knowledge_id, task, status, score, json.dumps(evidence, ensure_ascii=True), _now()),
+            )
+        return {"run_id": run_id, "knowledge_id": knowledge_id, "status": status, "score": score}
+
+    def practice_seen(self, knowledge_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM practice_runs WHERE knowledge_id = ? LIMIT 1", (knowledge_id,)
+            ).fetchone()
+        return row is not None
+
+    def record_research(
+        self,
+        query: str,
+        *,
+        sources_selected: list[str],
+        source_quality: dict[str, Any],
+        elapsed_ms: float,
+        information_found: bool,
+        verification_success: bool,
+        usefulness: str = "unrated",
+    ) -> dict[str, Any]:
+        research_id = f"research-{uuid.uuid4().hex}"
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO research_events(
+                   research_id, query, sources_selected, source_quality, elapsed_ms,
+                   information_found, verification_success, usefulness, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    research_id,
+                    query[:8_000],
+                    json.dumps(sources_selected, ensure_ascii=True),
+                    json.dumps(source_quality, ensure_ascii=True),
+                    float(elapsed_ms),
+                    int(information_found),
+                    int(verification_success),
+                    usefulness,
+                    _now(),
+                ),
+            )
+        return {"research_id": research_id, "information_found": information_found}
+
+    def enqueue_task(self, kind: str, priority: float, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
+        task_id = "task-" + sha256(f"{kind}\n{normalized}".encode("utf-8")).hexdigest()[:24]
+        now = _now()
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO evolution_tasks(task_id, kind, priority, payload, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(task_id) DO UPDATE SET priority = MAX(priority, excluded.priority),
+                   updated_at = excluded.updated_at WHERE evolution_tasks.status IN ('queued', 'paused')""",
+                (task_id, kind, max(0.0, min(1.0, float(priority))), normalized, now, now),
+            )
+        return {"task_id": task_id, "kind": kind, "priority": priority, "status": "queued"}
+
+    def continuous_counts(self) -> dict[str, int]:
+        with self._connect() as connection:
+            counts: dict[str, int] = {}
+            for table, key in (
+                ("interaction_events", "interactions"),
+                ("practice_runs", "practice_runs"),
+                ("research_events", "research_events"),
+                ("evolution_tasks", "evolution_tasks"),
+            ):
+                counts[key] = int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+            counts["queued_interactions"] = int(connection.execute("SELECT COUNT(*) FROM interaction_events WHERE status = 'queued'").fetchone()[0])
+            counts["failed_practice_runs"] = int(connection.execute("SELECT COUNT(*) FROM practice_runs WHERE status = 'failed'").fetchone()[0])
+        return counts
+
+    def continuous_overview(self) -> dict[str, Any]:
+        state: dict[str, Any] = {}
+        state_path = getattr(self.settings, "continuous_state_path", None)
+        if state_path and state_path.exists():
+            try:
+                loaded = json.loads(state_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    state = loaded
+            except (OSError, json.JSONDecodeError):
+                state = {}
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT interaction_id, model_id, question, answer, answer_quality,
+                   feedback, status, created_at, processed_at
+                   FROM interaction_events ORDER BY created_at DESC LIMIT 25"""
+            ).fetchall()
+            research = connection.execute(
+                """SELECT research_id, query, sources_selected, source_quality,
+                   elapsed_ms, information_found, verification_success, usefulness,
+                   created_at FROM research_events ORDER BY created_at DESC LIMIT 25"""
+            ).fetchall()
+        return {
+            "counts": self.continuous_counts(),
+            "state": state,
+            "interactions": [dict(row) for row in rows],
+            "research": [dict(row) for row in research],
+        }
+
     def overview(self) -> dict[str, Any]:
         self.sync_models()
         with self._connect() as connection:
@@ -81,7 +286,15 @@ class AdminStore:
             approvals = [dict(row) for row in connection.execute("SELECT * FROM deployment_approvals ORDER BY created_at DESC LIMIT 20")]
             audits = [dict(row) for row in connection.execute("SELECT * FROM audit_events ORDER BY created_at DESC LIMIT 30")]
             sources = [dict(row) for row in connection.execute("SELECT * FROM approved_sources ORDER BY created_at DESC")]
-        return {"models": catalog(self.settings), "candidates": self.candidate_reports(), "training_jobs": jobs, "deployment_approvals": approvals, "sources": sources, "audit_events": audits}
+        return {
+            "models": catalog(self.settings),
+            "candidates": self.candidate_reports(),
+            "training_jobs": jobs,
+            "deployment_approvals": approvals,
+            "sources": sources,
+            "audit_events": audits,
+            "continuous": self.continuous_overview(),
+        }
 
     def candidate_reports(self) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
@@ -208,12 +421,25 @@ class AdminStore:
         spec = get_model_spec(model_id)
         foundation = foundation_config(self.settings, model_id)
         job_id = f"job-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}"
-        status = "queued" if (foundation["model"] or foundation["path"]) and dataset_count else "blocked"
+        with self._connect() as connection:
+            active_jobs = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM training_jobs WHERE status IN ('queued', 'running')"
+                ).fetchone()[0]
+            )
+        has_capacity = active_jobs < self.settings.background_max_concurrent_jobs
+        status = (
+            "queued"
+            if (foundation["model"] or foundation["path"]) and dataset_count and has_capacity
+            else "blocked"
+        )
         error = None
         if not (foundation["model"] or foundation["path"]):
             error = f"Configure {spec.foundation_model_env} or {spec.foundation_path_env} before training."
         elif not dataset_count:
             error = "No clean, approved training records are available."
+        elif not has_capacity:
+            error = "The background training concurrency budget is full; retry after the active job finishes."
         candidate = candidates_path(self.settings, model_id) / job_id
         with self._connect() as connection:
             connection.execute(

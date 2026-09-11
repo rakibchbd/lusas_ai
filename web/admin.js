@@ -61,10 +61,20 @@ function renderAudit(events) {
   target.innerHTML = events.length ? events.slice(0, 30).map((event) => `<div class="stack-item"><strong>${escapeHtml(event.action)}</strong><span>${escapeHtml(event.subject)} · ${escapeHtml(event.actor)}</span><small>${escapeHtml(event.created_at)}</small></div>`).join("") : "<p>No audit events yet.</p>";
 }
 
+function renderContinuous(counts) {
+  const target = document.querySelector("#continuous-summary");
+  const payload = counts || {};
+  const data = payload.counts || payload;
+  const resources = (payload.state || {}).last_result?.resources || {};
+  const resourceText = resources.rss_mb == null ? "No resource sample yet" : `${escapeHtml(resources.rss_mb)}MB RSS · ${escapeHtml(resources.disk_free_mb)}MB free disk`;
+  const reviews = (payload.interactions || []).filter((item) => item.status === "needs_review" || item.status === "failed").length;
+  target.innerHTML = `<div class="stack-item"><strong>${escapeHtml(data.interactions ?? 0)} interactions</strong><span>${escapeHtml(data.queued_interactions ?? 0)} queued · ${escapeHtml(reviews)} need review</span></div><div class="stack-item"><strong>${escapeHtml(data.practice_runs ?? 0)} retention checks</strong><span>${escapeHtml(data.failed_practice_runs ?? 0)} failed checks recorded as improvement gaps</span></div><div class="stack-item"><strong>${escapeHtml(data.research_events ?? 0)} research events</strong><span>${escapeHtml(data.evolution_tasks ?? 0)} durable improvement tasks</span></div><div class="stack-item"><strong>Resource sample</strong><span>${resourceText}</span></div>`;
+}
+
 async function loadAdmin() {
   try {
     const [overview, knowledge, audit] = await Promise.all([request("/api/admin/overview"), request("/api/admin/knowledge"), request("/api/admin/audit")]);
-    renderModels(overview.models || []); renderCandidates(overview.candidates || []); renderKnowledge(knowledge.records || []); renderSources(overview.sources || []); renderJobs(overview.training_jobs || []); renderAudit(audit.events || []); setStatus("ADMIN CONNECTED");
+    renderModels(overview.models || []); renderCandidates(overview.candidates || []); renderKnowledge(knowledge.records || []); renderSources(overview.sources || []); renderJobs(overview.training_jobs || []); renderContinuous(overview.continuous || {}); renderAudit(audit.events || []); setStatus("ADMIN CONNECTED");
   } catch (error) { setStatus(error.message, true); }
 }
 

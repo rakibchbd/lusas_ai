@@ -16,7 +16,9 @@ from lusas_ai.model_registry import (
     candidates_path,
     get_model_spec,
     stable_path,
+    versions_path,
 )
+from lusas_ai.version_registry import append_version
 
 
 REQUIRED_EVALUATION_GATES = frozenset(
@@ -96,6 +98,15 @@ def promote(
             raise ValueError("Candidate metadata does not match the selected model.")
 
     stable = stable_path(settings, model_id)
+    parent_metadata: dict[str, Any] = {}
+    previous_metadata_path = stable / "model.json"
+    if previous_metadata_path.exists():
+        try:
+            loaded = json.loads(previous_metadata_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                parent_metadata = loaded
+        except (OSError, json.JSONDecodeError):
+            parent_metadata = {}
     backup = backup_stable(root, model_id, stable)
     model_root = stable.parent
     incoming = model_root / f".stable-{run_id()}"
@@ -125,6 +136,21 @@ def promote(
         shutil.rmtree(incoming, ignore_errors=True)
         raise
     shutil.rmtree(previous, ignore_errors=True)
+    append_version(
+        versions_path(settings, model_id),
+        version=metadata["version"],
+        parent_version=parent_metadata.get("version"),
+        model_id=model_id,
+        status="DEPLOYED",
+        deployment_status="stable",
+        changes=["approved model candidate promoted"],
+        reason="administrator-approved candidate deployment",
+        training_configuration=evaluation.get("training_configuration", {}),
+        benchmark_results=evaluation.get("metrics", {}),
+        safety_results={"passed": evaluation.get("gates", {}).get("safety") is True},
+        test_results={"gates": evaluation.get("gates", {})},
+        rollback_point=str(backup),
+    )
     return backup
 
 
@@ -159,6 +185,26 @@ def restore_backup(backup: Path, root: Path, model_id: str = "sara-1.0") -> None
         shutil.rmtree(incoming, ignore_errors=True)
         raise
     shutil.rmtree(previous, ignore_errors=True)
+    restored_metadata: dict[str, Any] = {}
+    metadata_path = stable / "model.json"
+    if metadata_path.exists():
+        try:
+            loaded = json.loads(metadata_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                restored_metadata = loaded
+        except (OSError, json.JSONDecodeError):
+            restored_metadata = {}
+    append_version(
+        versions_path(settings, model_id),
+        version=f"rollback-{run_id()}",
+        parent_version=restored_metadata.get("version"),
+        model_id=model_id,
+        status="ROLLED_BACK",
+        deployment_status="rollback",
+        changes=[],
+        reason="restored administrator-selected model backup",
+        rollback_point=str(backup),
+    )
 
 
 def main() -> int:

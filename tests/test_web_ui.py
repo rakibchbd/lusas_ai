@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from http.client import HTTPConnection
+import json
 from pathlib import Path
 import tempfile
 import threading
@@ -53,6 +54,9 @@ class WebUiTests(unittest.TestCase):
         response = self.connection.getresponse()
         self.assertEqual(response.status, 200)
         self.assertIn("Official models", response.read().decode("utf-8"))
+        self.connection.request("GET", "/app.js")
+        response = self.connection.getresponse()
+        self.assertIn("chat/feedback", response.read().decode("utf-8"))
 
     def test_model_catalog_and_selection_endpoint(self) -> None:
         self.connection.request("GET", "/api/models")
@@ -105,6 +109,25 @@ class WebUiTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         self.assertIn('"response": "67+87 = 154"', body)
         self.assertIn('"model_id": "lira-1.0"', body)
+
+    def test_chat_feedback_is_persisted_for_the_next_learning_cycle(self) -> None:
+        self.connection.request(
+            "POST",
+            "/api/chat",
+            body='{"prompt":"hello","model_id":"sara-1.0"}',
+            headers={"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        interaction_id = json.loads(response.read().decode("utf-8"))["interaction_id"]
+        self.connection.request(
+            "POST",
+            "/api/chat/feedback",
+            body=json.dumps({"interaction_id": interaction_id, "feedback": "The answer was not useful."}),
+            headers={"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        self.assertEqual(response.status, 200)
+        self.assertIn('"status": "queued"', response.read().decode("utf-8"))
 
     def test_chat_endpoint_rejects_empty_prompt(self) -> None:
         self.connection.request(

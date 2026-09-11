@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import json
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -20,6 +21,20 @@ class AutomaticUpgradeTests(unittest.TestCase):
                 result = auto_upgrade.run_once(root)
             self.assertEqual(result["status"], "stopped")
             self.assertFalse(settings.evolution_cycles_path.exists())
+
+    def test_cycle_failure_is_persisted_for_restart_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            settings = Settings(root=root)
+            with (
+                patch.object(auto_upgrade.Settings, "load", return_value=settings),
+                patch.object(auto_upgrade, "_run_once_impl", side_effect=RuntimeError("worker crashed")),
+            ):
+                with self.assertRaises(RuntimeError):
+                    auto_upgrade.run_once(root)
+            state = json.loads(settings.cycle_state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["status"], "failed")
+            self.assertIn("worker crashed", state["error"])
 
     def test_code_evolution_runs_when_model_inputs_are_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

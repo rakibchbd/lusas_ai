@@ -69,6 +69,10 @@ def backups_path(settings: Any, model_id: str) -> Path:
     return model_root(settings, model_id) / "backups"
 
 
+def versions_path(settings: Any, model_id: str) -> Path:
+    return model_root(settings, model_id) / "versions.jsonl"
+
+
 def foundation_config(settings: Any, model_id: str) -> dict[str, str | None]:
     """Resolve a foundation only from explicit per-model configuration.
 

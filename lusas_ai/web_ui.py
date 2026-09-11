@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 from pathlib import Path
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -15,9 +16,12 @@ from urllib.parse import urlsplit
 from .admin_db import AdminStore
 from .agent import LusasAgent
 from .config import Settings
+from .conversation import quick_response
 from .local_model import LocalModelError
 from .model_registry import MODEL_IDS, catalog, select_model, selected_model_id
 from .monitor import report
+from .knowledge import context as knowledge_context
+from .web_learning import research_needed
 from training.model_lifecycle import promote, restore_backup
 
 
@@ -174,7 +178,31 @@ class LusasRequestHandler(BaseHTTPRequestHandler):
                     return
                 with self.server.chat_lock:
                     response = self.server.agent.chat(prompt, model_id=model_id)
-                self._send_json(HTTPStatus.OK, {"response": response, "model_id": model_id})
+                interaction = self.server.admin_store.record_interaction(
+                    model_id,
+                    prompt,
+                    response,
+                    knowledge_used=bool(knowledge_context(self.server.settings, prompt)),
+                    web_search_used=(quick_response(prompt) is None and research_needed(prompt)),
+                    sources=re.findall(r"https://[^\s)]+", response),
+                )
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "response": response,
+                        "model_id": model_id,
+                        "interaction_id": interaction["interaction_id"],
+                    },
+                )
+                return
+            if path == "/api/chat/feedback":
+                interaction_id = payload.get("interaction_id")
+                feedback = payload.get("feedback")
+                if not isinstance(interaction_id, str) or not isinstance(feedback, str):
+                    self._error(HTTPStatus.BAD_REQUEST, "interaction_id and feedback are required")
+                    return
+                self.server.admin_store.add_interaction_feedback(interaction_id, feedback)
+                self._send_json(HTTPStatus.OK, {"status": "queued", "interaction_id": interaction_id})
                 return
             if path == "/api/models/select":
                 model_id = payload.get("model_id")

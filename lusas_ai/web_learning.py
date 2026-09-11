@@ -8,6 +8,8 @@ from html.parser import HTMLParser
 import json
 from pathlib import Path
 import re
+import sqlite3
+import time
 try:
     import fcntl
 except ImportError:  # pragma: no cover - Windows has no fcntl
@@ -528,14 +530,37 @@ def research_context(settings: Settings, query: str, limit: int = 3) -> str:
     controls = read_control(settings.root, settings.autonomy_level)
     if not settings.web_learning_enabled or not web_research_allowed(controls):
         return ""
+    started = time.monotonic()
+
+    def finish(result: str, matches: list[dict[str, str]]) -> str:
+        try:
+            source_urls = [str(item.get("url", "")) for item in matches if item.get("url")]
+            quality = {
+                str(item.get("url", "")): str(item.get("verification_status", "unverified"))
+                for item in matches
+                if item.get("url")
+            }
+            AdminStore(settings).record_research(
+                query,
+                sources_selected=source_urls,
+                source_quality=quality,
+                elapsed_ms=(time.monotonic() - started) * 1_000,
+                information_found=bool(matches),
+                verification_success=bool(result),
+            )
+        except (OSError, ValueError, sqlite3.Error):
+            pass
+        return result
+
     matches = search(settings, query, limit=limit)
     result = _approved_context(matches, limit=limit)
     if result:
-        return result
+        return finish(result, matches)
     query_terms = set(re.findall(r"[a-z0-9]{3,}", query.lower()))
     force_refresh = bool(query_terms.intersection(_RESEARCH_TERMS))
     try:
         refresh(settings, force=force_refresh)
     except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
-        return ""
-    return _approved_context(search(settings, query, limit=limit), limit=limit)
+        return finish("", matches)
+    matches = search(settings, query, limit=limit)
+    return finish(_approved_context(matches, limit=limit), matches)

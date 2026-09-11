@@ -58,6 +58,13 @@ class Settings:
     model_upgrade_interval_minutes: int = 5
     evolution_enabled: bool = False
     evolution_interval_minutes: int = 5
+    continuous_learning_enabled: bool = True
+    background_max_seconds: int = 120
+    background_max_memory_mb: int = 2048
+    background_max_concurrent_jobs: int = 1
+    continuous_state_file: str = ".lusas/continuous_state.json"
+    incremental_index_file: str = ".lusas/incremental_index.json"
+    practice_file: str = ".lusas/practice_runs.jsonl"
     notify_file: str = ".lusas/notifications.jsonl"
     upgrade_log_file: str = ".lusas/upgrade_log.jsonl"
     upgrade_state_file: str = ".lusas/upgrade_state.json"
@@ -155,6 +162,28 @@ class Settings:
             evolution_interval_minutes=_positive_int(
                 payload.get("evolution_interval_minutes"),
                 cls.evolution_interval_minutes,
+            ),
+            continuous_learning_enabled=bool(
+                payload.get("continuous_learning_enabled", cls.continuous_learning_enabled)
+            ),
+            background_max_seconds=_positive_int(
+                payload.get("background_max_seconds"), cls.background_max_seconds
+            ),
+            background_max_memory_mb=_positive_int(
+                payload.get("background_max_memory_mb"), cls.background_max_memory_mb
+            ),
+            background_max_concurrent_jobs=_positive_int(
+                payload.get("background_max_concurrent_jobs"),
+                cls.background_max_concurrent_jobs,
+            ),
+            continuous_state_file=_relative_setting(
+                payload.get("continuous_state_file"), cls.continuous_state_file
+            ),
+            incremental_index_file=_relative_setting(
+                payload.get("incremental_index_file"), cls.incremental_index_file
+            ),
+            practice_file=_relative_setting(
+                payload.get("practice_file"), cls.practice_file
             ),
             notify_file=_relative_setting(
                 payload.get("notify_file"), cls.notify_file
@@ -295,3 +324,15 @@ class Settings:
     @property
     def evolution_cycles_path(self) -> Path:
         return (self.root / self.evolution_cycles_file).resolve()
+
+    @property
+    def continuous_state_path(self) -> Path:
+        return (self.root / self.continuous_state_file).resolve()
+
+    @property
+    def incremental_index_path(self) -> Path:
+        return (self.root / self.incremental_index_file).resolve()
+
+    @property
+    def practice_path(self) -> Path:
+        return (self.root / self.practice_file).resolve()

@@ -106,6 +106,10 @@ h1 { font-size: clamp(25px, 3vw, 38px); line-height: 1.12; margin: 13px 0 8px; l
 .message-meta strong { font-size: 11px; letter-spacing: .08em; }
 .message-meta span { color: var(--faint); font-size: 8px; letter-spacing: .15em; }
 .message-body p { margin: 0; color: #c3cada; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-feedback { display: flex; gap: .45rem; margin-top: .65rem; color: var(--muted); font-size: .78rem; }
+.message-feedback button { border: 1px solid var(--line); border-radius: 999px; padding: .3rem .6rem; color: var(--muted); background: transparent; cursor: pointer; }
+.message-feedback button:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.message-feedback button:disabled { cursor: default; opacity: .55; }
 .user-message { margin-left: auto; flex-direction: row-reverse; text-align: right; }
 .user-message .message-meta { justify-content: flex-end; }
 .user-message .message-body { max-width: 72%; }

@@ -6,15 +6,17 @@ from pathlib import Path
 import time
 from typing import Any
 
+from .admin_db import AdminStore
 from .config import Settings
 from .control import read as read_control
+from .continuous import state as continuous_state
 from .engine import read_cycles
 from .gaps import prioritized
 from .knowledge import is_outdated, records as knowledge_records
 from .learning import LearningStore
 from .model_registry import catalog, selected_model_id
 from .scorecard import history as scorecard_history
-from .skills import ensure_builtin
+from .skills import capability_graph, ensure_builtin
 from .upgrade_log import current_count, format_version
 from .version_registry import bootstrap_legacy
 
@@ -45,6 +47,8 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
     gaps = prioritized(settings)
     cycles = read_cycles(settings)
     scorecards = scorecard_history(settings)
+    continuous_store = AdminStore(settings)
+    continuous_counts = continuous_store.continuous_counts()
     state = {"upgrade_count": current_count(settings.upgrade_state_path)}
     versions_path = settings.root / ".lusas" / "versions.jsonl"
     lessons_path = settings.root / ".lusas" / "lessons.jsonl"
@@ -83,11 +87,17 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
             "open": len([item for item in gaps if item.get("status", "open") == "open"]),
             "items": gaps[:recent],
         },
+        "continuous": {
+            "enabled": settings.continuous_learning_enabled,
+            "state": continuous_state(settings),
+            "counts": continuous_counts,
+        },
         "skills": {
             "total": len(skills),
             "verified": sum(1 for item in skills if item.get("last_verified")),
             "items": skills,
         },
+        "capability_graph": capability_graph(settings),
         "scorecard": scorecards[-1] if scorecards else None,
         "current_evolution": cycles[-1] if cycles else None,
         "evolution_cycles": cycles[-recent:],

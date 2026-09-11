@@ -114,3 +114,25 @@ def record_use(
         item["benchmark_score"] = benchmark_score
     _write(settings.skills_path, records)
     return item
+
+
+def capability_graph(settings: Settings) -> dict[str, list[dict[str, Any]]]:
+    """Build a small explainable capability graph from registered skills."""
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    for skill in ensure_builtin(settings):
+        name = str(skill.get("skill", ""))
+        nodes.append({"id": name, "type": "skill", "success_rate": skill.get("success_rate")})
+        for tool in skill.get("required_tools", []):
+            tool_id = f"tool:{tool}"
+            nodes.append({"id": tool_id, "type": "tool"})
+            edges.append({"from": name, "to": tool_id, "relation": "requires"})
+        for dependency in skill.get("knowledge_dependencies", []):
+            knowledge_id = f"knowledge:{dependency}"
+            nodes.append({"id": knowledge_id, "type": "knowledge"})
+            edges.append({"from": knowledge_id, "to": name, "relation": "enables"})
+    unique_nodes = {item["id"]: item for item in nodes}
+    unique_edges = {
+        (item["from"], item["to"], item["relation"]): item for item in edges
+    }
+    return {"nodes": list(unique_nodes.values()), "edges": list(unique_edges.values())}

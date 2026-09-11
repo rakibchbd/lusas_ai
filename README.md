@@ -142,6 +142,12 @@ python3 training/auto_upgrade.py --once
 python3 training/auto_upgrade.py
 ~~~
 
+Each real cycle audits the repository, records served interactions, detects
+changed learning inputs, runs retention practice, measures process resources,
+refreshes approved web sources, and then trains/evaluates model candidates when
+their explicit foundations and approved data are available. The worker keeps
+durable state under `.lusas/` and resumes its next cycle after a restart.
+
 The cycle may gather approved web references and create a candidate for the
 configured default model. It records evaluation results and notifications,
 but leaves deployment in `staged` state until administrator approval. Source
