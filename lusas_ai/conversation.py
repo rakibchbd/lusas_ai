@@ -6,7 +6,8 @@ import re
 
 
 _GREETING = re.compile(
-    r"^\s*(?:hi|hello|hey|good\s+(?:morning|afternoon|evening))(?:\s+there)?[!?.\s]*$",
+    r"^\s*(?:hi|hello|hey|good\s+(?:morning|afternoon|evening))(?:\s+there)?"
+    r"(?:[,!?.\s]+(?:how\s+are\s+you|how's\s+it\s+going))?[!?.\s]*$",
     re.IGNORECASE,
 )
 _WELLBEING = re.compile(
@@ -29,6 +30,47 @@ _PARAMETERS = re.compile(
     r"how\s+large\s+is\s+your\s+model)[!?.\s]*$",
     re.IGNORECASE,
 )
+_THANKS = re.compile(
+    r"^\s*(?:thanks?|thank\s+you)(?:\s+(?:so\s+much|very\s+much|for\s+your\s+help))?"
+    r"[!?.\s]*$",
+    re.IGNORECASE,
+)
+_CONFUSION = re.compile(
+    r"^\s*(?:i\s+don't\s+understand|i\s+do\s+not\s+understand|"
+    r"(?:please\s+)?explain\s+(?:that|this)\s+(?:again|more\s+simply)|"
+    r"what\s+do(?:es)?\s+that\s+mean)[!?.\s]*$",
+    re.IGNORECASE,
+)
+_REPEAT = re.compile(
+    r"^\s*(?:can|could|would)\s+you\s+(?:please\s+)?repeat(?:\s+that|\s+it)?"
+    r"[!?.\s]*$",
+    re.IGNORECASE,
+)
+_WHO_ARE_YOU = re.compile(
+    r"^\s*(?:who\s+are\s+you|what(?:'s|\s+is)\s+your\s+name|"
+    r"what\s+should\s+i\s+call\s+you)[!?.\s]*$",
+    re.IGNORECASE,
+)
+_HELP = re.compile(
+    r"^\s*(?:(?:can|could|would)\s+you\s+(?:please\s+)?help\s+me|"
+    r"i\s+(?:have|'ve\s+got)\s+a\s+question)[!?.\s]*$",
+    re.IGNORECASE,
+)
+_WHAT_DOING = re.compile(
+    r"^\s*(?:what\s+are\s+you\s+doing|are\s+you\s+(?:there|available|listening))"
+    r"[!?.\s]*$",
+    re.IGNORECASE,
+)
+_ACKNOWLEDGEMENT = re.compile(
+    r"^\s*(?:okay|ok|alright|got\s+it|that\s+makes\s+sense|understood)"
+    r"[!?.\s]*$",
+    re.IGNORECASE,
+)
+_CORRECTION = re.compile(
+    r"^\s*(?:no,?\s+)?(?:that(?:'s|\s+is)\s+not\s+what\s+i\s+meant|"
+    r"you\s+misunderstood|let\s+me\s+clarify)[!?.\s]*$",
+    re.IGNORECASE,
+)
 
 
 def quick_response(prompt: str) -> str | None:
@@ -37,6 +79,25 @@ def quick_response(prompt: str) -> str | None:
         return "Hello! I'm LUSAS AI. How can I help?"
     if _WELLBEING.fullmatch(prompt):
         return "I'm ready to help with your local project. What would you like to work on?"
+    if _THANKS.fullmatch(prompt):
+        return "You're welcome! Let me know what you would like to do next."
+    if _CONFUSION.fullmatch(prompt):
+        return "No problem. Tell me which part is unclear and I'll explain it more simply."
+    if _REPEAT.fullmatch(prompt):
+        return "Sure. Tell me which part you want me to repeat."
+    if _WHO_ARE_YOU.fullmatch(prompt):
+        return (
+            "I am LUSAS AI, a local assistant for software development, learning, "
+            "and project work."
+        )
+    if _HELP.fullmatch(prompt):
+        return "Yes—tell me what you would like help with."
+    if _WHAT_DOING.fullmatch(prompt):
+        return "I'm here and ready to help with your question or project."
+    if _ACKNOWLEDGEMENT.fullmatch(prompt):
+        return "Great. If you want, we can continue with a question or a small example."
+    if _CORRECTION.fullmatch(prompt):
+        return "Thanks for correcting me. Please restate the goal in your own words."
     if _KNOWS_USER.fullmatch(prompt):
         return (
             "Based on what you've shared locally, you are Rakib Chowdhury, also known "

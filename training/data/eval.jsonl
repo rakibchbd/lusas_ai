@@ -1,3 +1,8 @@
 {"instruction":"Write a Python function that calculates the sum of a list of integers.","expected":"return sum("}
 {"instruction":"Write a Python function that checks whether a string is a palindrome.","expected":"[::-1]"}
 {"instruction":"Who made you?","expected":"Rakib Chowdhury"}
+{"instruction":"Hello there","expected":"Hello! I'm LUSAS AI"}
+{"instruction":"What do you know?","expected":"local knowledge base"}
+{"instruction":"Do you know me?","expected":"Rakib Chowdhury"}
+{"instruction":"How many parameters do you have?","expected":"0.5 billion parameters"}
+{"instruction":"Who is Rakin Hasan?","expected":"I don't have verified information"}

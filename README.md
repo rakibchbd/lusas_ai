@@ -116,6 +116,12 @@ locally, and never executes downloaded content or sends prompts, credentials,
 or workspace files to a website. Hugging Face is used only to download model
 files during setup or training; inference itself runs locally.
 
+The starter training set includes varied human question forms—conversation,
+clarification, identity, explanations, coding, learning, and safety requests—so
+the model can learn patterns beyond one exact wording. It is a growing starter
+corpus, not a complete list of every question a person could ask; approved
+examples are merged into later training cycles.
+
 The default web sources are official release feeds for CPython and
 Hugging Face Transformers. Change `web_sources` and
 `web_allowed_domains` together in `config.json` to use other HTTPS feeds.
