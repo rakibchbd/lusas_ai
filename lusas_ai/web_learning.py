@@ -18,6 +18,8 @@ from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
 from .config import Settings
+from .control import read as read_control, web_research_allowed
+from .knowledge import upsert_web
 
 
 MAX_RESPONSE_BYTES = 2_000_000
@@ -252,6 +254,13 @@ def _refresh_unlocked(settings: Settings, force: bool = False) -> dict[str, obje
     """Fetch configured feeds and create local, non-executable learning records."""
     if not settings.web_learning_enabled:
         return {"status": "disabled", "new_items": 0}
+    controls = read_control(settings.root, settings.autonomy_level)
+    if not web_research_allowed(controls):
+        return {
+            "status": "disabled",
+            "reason": "web research is disabled by runtime controls",
+            "new_items": 0,
+        }
     if not settings.web_sources:
         return {"status": "no_sources", "new_items": 0}
     if not settings.web_allowed_domains:
@@ -292,6 +301,7 @@ def _refresh_unlocked(settings: Settings, force: bool = False) -> dict[str, obje
     # Rewrite atomically on every successful refresh so older cache entries
     # receive the current verification metadata as the schema evolves.
     _write_jsonl(settings.web_cache_path, all_items)
+    knowledge_items = upsert_web(settings, all_items)
 
     training_records = _read_jsonl(settings.web_training_path)
     known_training_ids = {record.get("source_id") for record in training_records}
@@ -338,6 +348,7 @@ def _refresh_unlocked(settings: Settings, force: bool = False) -> dict[str, obje
     return {
         "status": "refreshed",
         "new_items": len(new_items),
+        "knowledge_items": knowledge_items,
         "sources_checked": len(settings.web_sources),
         "errors": errors,
     }
@@ -374,8 +385,7 @@ def search(settings: Settings, query: str, limit: int = 3) -> list[dict[str, str
 
 def context(settings: Settings, query: str, limit: int = 3) -> str:
     matches = search(settings, query, limit=limit)
-    chunks: list[str] = []
-    used = 0
+    result = ""
     for item in matches:
         chunk = (
             f"Untrusted web reference ({item.get('verification_status', 'unverified')}): "
@@ -383,9 +393,9 @@ def context(settings: Settings, query: str, limit: int = 3) -> str:
             f"Source: {item.get('url', '')}\n"
             f"Excerpt: {item.get('summary', '')}"
         )
-        remaining = MAX_CONTEXT_CHARS - used
+        separator = "\n\n" if result else ""
+        remaining = MAX_CONTEXT_CHARS - len(result) - len(separator)
         if remaining <= 0:
             break
-        chunks.append(chunk[:remaining])
-        used += min(len(chunk), remaining) + 2
-    return "\n\n".join(chunks)
+        result += separator + chunk[:remaining]
+    return result

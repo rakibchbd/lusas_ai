@@ -18,6 +18,9 @@ def render(settings: Settings) -> str:
     payload = report(settings, recent=20)
     policy = payload["policy"]
     web = payload["web_learning"]
+    knowledge = payload["knowledge"]
+    skills = payload["skills"]
+    scorecard = payload.get("scorecard") or {}
     rows = []
     for event in payload["recent_upgrades"]:
         rows.append(
@@ -50,11 +53,19 @@ code {{ background: #eaeef2; padding: .1rem .25rem; border-radius: 4px; }}
 <div class="card">Version<div class="value">{_cell(payload['current_version'])}</div></div>
 <div class="card">Successful upgrades<div class="value">{_cell(payload['upgrade_count'])}</div></div>
 <div class="card">Web articles cached<div class="value">{_cell(web['cached_articles'])}</div></div>
+<div class="card">Measured score<div class="value">{_cell(scorecard.get('overall_score'))}</div></div>
+<div class="card">Knowledge<div class="value">{_cell(knowledge['total'])} / {_cell(knowledge['verified'])} verified</div></div>
+<div class="card">Skills<div class="value">{_cell(skills['total'])}</div></div>
 <div class="card">Lessons / regressions<div class="value">{_cell(payload['lessons_count'])} / {_cell(payload['regressions_count'])}</div></div>
 </section>
 <h2>Policy</h2><div class="card">Model upgrades: <b>{_cell(policy['auto_apply_upgrades'])}</b> ·
 Code upgrades: <b>{_cell(policy['auto_code_upgrades'])}</b> ·
-Web learning: <b>{_cell(web['enabled'])}</b> every <b>{_cell(web['interval_minutes'])} minutes</b></div>
+Web learning: <b>{_cell(web['enabled'])}</b> every <b>{_cell(web['interval_minutes'])} minutes</b> ·
+Autonomy: <b>{_cell(policy['autonomy_level'])}/5</b> ·
+Emergency stop: <b>{_cell(policy['runtime']['emergency_stop'])}</b></div>
+<h2>Knowledge and gaps</h2><div class="card">Verified: <b>{_cell(knowledge['verified'])}</b> ·
+Outdated: <b>{_cell(knowledge['outdated'])}</b> ·
+Open gaps: <b>{_cell(payload['knowledge_gaps']['open'])}</b></div>
 <h2>Upgrade history</h2><table><thead><tr><th>Time</th><th>Version</th><th>Status</th><th>Score</th><th>Improvement</th></tr></thead>
 <tbody>{''.join(rows) or '<tr><td colspan="5">No upgrade records yet.</td></tr>'}</tbody></table>
 <script type="application/json" id="lusas-report">{data}</script>

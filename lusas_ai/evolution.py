@@ -24,6 +24,7 @@ import time
 from typing import Any, Callable, Mapping, Protocol
 
 from .config import Settings
+from .control import automatic_deploy_allowed, read as read_control
 from .notifications import notify
 from .updater import (
     apply_candidate,
@@ -634,6 +635,22 @@ class EvolutionOrchestrator:
         apply: bool = False,
         progress_callback: Callable[[ProgressEvent], None] | None = None,
     ) -> EvolutionResult:
+        controls = read_control(self.settings.root, self.settings.autonomy_level)
+        if controls.get("emergency_stop"):
+            return EvolutionResult(
+                "rejected", reason="emergency stop is active; evolution is paused"
+            )
+        if apply and (
+            controls.get("production_locked") or controls.get("upgrades_paused")
+        ):
+            return EvolutionResult(
+                "rejected",
+                reason="manual deployment is blocked by runtime production controls",
+            )
+        automatic_deploy = (
+            self.settings.auto_apply_upgrades
+            and automatic_deploy_allowed(controls)
+        )
         progress = ProgressReporter(
             self.settings, progress_callback or self.progress_callback
         )
@@ -714,7 +731,7 @@ class EvolutionOrchestrator:
             backup = None
             deployed = False
             deployment = "none"
-            if apply or self.settings.auto_apply_upgrades:
+            if apply or automatic_deploy:
                 progress.emit("deployment", "Applying validated candidate")
                 backup = self.deployer.deploy(self.settings, candidate)
                 deployed = True

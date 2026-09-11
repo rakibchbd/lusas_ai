@@ -5,6 +5,7 @@
   "num_predict": 1024,
   "seed": 42,
   "workspace": "workspace",
+  "autonomy_level": 5,
   "auto_apply_upgrades": true,
   "auto_model_upgrades": true,
   "auto_code_upgrades": true,
@@ -27,5 +28,11 @@
   "web_max_items": 100,
   "web_cache_file": ".lusas/web_articles.jsonl",
   "web_training_file": ".lusas/web_training.jsonl",
-  "web_state_file": ".lusas/web_state.json"
+  "web_state_file": ".lusas/web_state.json",
+  "knowledge_file": ".lusas/knowledge.jsonl",
+  "knowledge_gaps_file": ".lusas/knowledge_gaps.jsonl",
+  "skills_file": ".lusas/skills.jsonl",
+  "audits_file": ".lusas/audits.jsonl",
+  "scorecards_file": ".lusas/scorecards.jsonl",
+  "evolution_cycles_file": ".lusas/evolution_cycles.jsonl"
 }

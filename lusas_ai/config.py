@@ -29,6 +29,13 @@ def _positive_int(value: Any, default: int) -> int:
         return default
 
 
+def _autonomy_level(value: Any, default: int) -> int:
+    try:
+        return max(0, min(5, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass(frozen=True)
 class Settings:
     root: Path
@@ -42,6 +49,7 @@ class Settings:
     num_predict: int = 1024
     seed: int | None = 42
     workspace: str = "workspace"
+    autonomy_level: int = 5
     auto_apply_upgrades: bool = False
     auto_model_upgrades: bool = True
     auto_code_upgrades: bool = False
@@ -62,6 +70,12 @@ class Settings:
     web_cache_file: str = ".lusas/web_articles.jsonl"
     web_training_file: str = ".lusas/web_training.jsonl"
     web_state_file: str = ".lusas/web_state.json"
+    knowledge_file: str = ".lusas/knowledge.jsonl"
+    knowledge_gaps_file: str = ".lusas/knowledge_gaps.jsonl"
+    skills_file: str = ".lusas/skills.jsonl"
+    audits_file: str = ".lusas/audits.jsonl"
+    scorecards_file: str = ".lusas/scorecards.jsonl"
+    evolution_cycles_file: str = ".lusas/evolution_cycles.jsonl"
 
     @property
     def workspace_root(self) -> Path:
@@ -101,6 +115,9 @@ class Settings:
                 else int(payload.get("seed", cls.seed))
             ),
             workspace=_relative_setting(payload.get("workspace"), cls.workspace),
+            autonomy_level=_autonomy_level(
+                payload.get("autonomy_level"), cls.autonomy_level
+            ),
             auto_apply_upgrades=bool(
                 payload.get("auto_apply_upgrades", cls.auto_apply_upgrades)
             ),
@@ -162,6 +179,24 @@ class Settings:
             web_state_file=_relative_setting(
                 payload.get("web_state_file"), cls.web_state_file
             ),
+            knowledge_file=_relative_setting(
+                payload.get("knowledge_file"), cls.knowledge_file
+            ),
+            knowledge_gaps_file=_relative_setting(
+                payload.get("knowledge_gaps_file"), cls.knowledge_gaps_file
+            ),
+            skills_file=_relative_setting(
+                payload.get("skills_file"), cls.skills_file
+            ),
+            audits_file=_relative_setting(
+                payload.get("audits_file"), cls.audits_file
+            ),
+            scorecards_file=_relative_setting(
+                payload.get("scorecards_file"), cls.scorecards_file
+            ),
+            evolution_cycles_file=_relative_setting(
+                payload.get("evolution_cycles_file"), cls.evolution_cycles_file
+            ),
         )
 
     @property
@@ -203,3 +238,27 @@ class Settings:
     @property
     def web_state_path(self) -> Path:
         return (self.root / self.web_state_file).resolve()
+
+    @property
+    def knowledge_path(self) -> Path:
+        return (self.root / self.knowledge_file).resolve()
+
+    @property
+    def knowledge_gaps_path(self) -> Path:
+        return (self.root / self.knowledge_gaps_file).resolve()
+
+    @property
+    def skills_path(self) -> Path:
+        return (self.root / self.skills_file).resolve()
+
+    @property
+    def audits_path(self) -> Path:
+        return (self.root / self.audits_file).resolve()
+
+    @property
+    def scorecards_path(self) -> Path:
+        return (self.root / self.scorecards_file).resolve()
+
+    @property
+    def evolution_cycles_path(self) -> Path:
+        return (self.root / self.evolution_cycles_file).resolve()

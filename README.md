@@ -20,6 +20,9 @@ Included:
 - pre-apply backups
 - tests, rollback-ready artifacts, native desktop notifications, and an
   inspectable upgrade history
+- runtime emergency controls, self-audit records, evidence-based knowledge
+  gaps, a local knowledge graph, skill registry, evolution-cycle history, and
+  multidimensional scorecards
 
 The checked-in configuration enables automatic model evaluation, promotion, and
 guarded source evolution. Every model cycle trains a candidate, evaluates it,
@@ -97,6 +100,14 @@ candidate, evaluates it against the regression set, and promotes it only when
 all evaluation cases pass. It never replaces the production model with an
 untested candidate.
 
+Each worker cycle now records an evolution ID and performs a self-audit before
+research, learning, experimentation, testing, benchmarking, comparison, and
+monitoring. Evidence is stored locally in `.lusas/audits.jsonl`,
+`.lusas/knowledge.jsonl`, `.lusas/knowledge_gaps.jsonl`,
+`.lusas/skills.jsonl`, `.lusas/scorecards.jsonl`, and
+`.lusas/evolution_cycles.jsonl`. Unmeasured score dimensions remain `null`; a
+configuration setting is never presented as proof of intelligence or skill.
+
 LUSAS answers from its local model, approved local training data, configured
 local workspace, and optionally cached excerpts from explicitly allowlisted
 HTTPS feeds. The web collector runs on a schedule, stores only bounded text
@@ -146,8 +157,29 @@ open .lusas/dashboard.html
 ~~~
 
 The dashboard shows version, policy, web-learning, lesson, regression, and
-upgrade-history summaries. It does not expose hidden model reasoning or grant
-new permissions.
+upgrade-history summaries, knowledge freshness, open gaps, skills, runtime
+controls, and measured score evidence. It does not expose hidden model
+reasoning or grant new permissions.
+
+Use the runtime controls when you need to stop or narrow autonomous behavior:
+
+~~~text
+python3 -m lusas_ai control status
+python3 -m lusas_ai control set-autonomy --level 3
+python3 -m lusas_ai control stop
+python3 -m lusas_ai control resume
+python3 -m lusas_ai control pause-learning
+python3 -m lusas_ai control pause-upgrades
+python3 -m lusas_ai control disable-web
+python3 -m lusas_ai control disable-self-code
+python3 -m lusas_ai control disable-auto-deploy
+python3 -m lusas_ai control lock
+~~~
+
+`stop` pauses the worker's learning and upgrade loops. `resume` clears that
+emergency stop and resumes those two loops; other switches remain as they
+were. `lock` prevents automatic or manual deployment until `unlock` is used.
+Rollback remains available while production is locked.
 
 The `evolve` command prints each gate as it runs. The automatic local worker
 is configured to run model and source-code upgrades every five minutes after

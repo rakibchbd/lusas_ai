@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 from .agent import LusasAgent
+from .control import read as read_control, update as update_control
 from .dashboard import write as write_dashboard
 from .local_model import LocalModelError
 from .monitor import follow, report, snapshot
@@ -31,6 +32,35 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lusas")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("status", help="Show local configuration.")
+    control_parser = subparsers.add_parser(
+        "control", help="Pause, resume, or bound autonomous evolution."
+    )
+    control_parser.add_argument(
+        "action",
+        choices=(
+            "status",
+            "set-autonomy",
+            "stop",
+            "resume",
+            "pause-learning",
+            "resume-learning",
+            "pause-upgrades",
+            "resume-upgrades",
+            "disable-web",
+            "enable-web",
+            "disable-self-code",
+            "enable-self-code",
+            "disable-auto-deploy",
+            "enable-auto-deploy",
+            "lock",
+            "unlock",
+        ),
+    )
+    control_parser.add_argument(
+        "--level",
+        type=int,
+        help="Runtime autonomy level from 0 to the configured maximum (for set-autonomy).",
+    )
     monitor_parser = subparsers.add_parser(
         "monitor",
         help="Inspect learned data and follow learning/upgrade events.",
@@ -145,6 +175,45 @@ def main(argv: list[str] | None = None) -> int:
                 f"({agent.settings.web_refresh_interval_minutes} minute interval)"
             )
             print(f"Background worker: {service_state()}")
+            print(f"Runtime controls: {json.dumps(read_control(agent.settings.root, agent.settings.autonomy_level), sort_keys=True)}")
+            return 0
+
+        if args.command == "control":
+            if args.action == "status":
+                print(json.dumps(read_control(agent.settings.root, agent.settings.autonomy_level), indent=2))
+                return 0
+            if args.action == "set-autonomy":
+                if args.level is None or not 0 <= args.level <= agent.settings.autonomy_level:
+                    raise ValueError(
+                        f"autonomy level must be between 0 and {agent.settings.autonomy_level}"
+                    )
+                state = update_control(
+                    agent.settings.root,
+                    agent.settings.autonomy_level,
+                    autonomy_level=args.level,
+                )
+                print(json.dumps(state, indent=2))
+                return 0
+            changes = {
+                "stop": {"emergency_stop": True, "learning_paused": True, "upgrades_paused": True},
+                "resume": {"emergency_stop": False, "learning_paused": False, "upgrades_paused": False},
+                "pause-learning": {"learning_paused": True},
+                "resume-learning": {"learning_paused": False},
+                "pause-upgrades": {"upgrades_paused": True},
+                "resume-upgrades": {"upgrades_paused": False},
+                "disable-web": {"web_research_enabled": False},
+                "enable-web": {"web_research_enabled": True},
+                "disable-self-code": {"self_code_enabled": False},
+                "enable-self-code": {"self_code_enabled": True},
+                "disable-auto-deploy": {"auto_deploy_enabled": False},
+                "enable-auto-deploy": {"auto_deploy_enabled": True},
+                "lock": {"production_locked": True},
+                "unlock": {"production_locked": False},
+            }[args.action]
+            state = update_control(
+                agent.settings.root, agent.settings.autonomy_level, **changes
+            )
+            print(json.dumps(state, indent=2))
             return 0
 
         if args.command == "monitor":

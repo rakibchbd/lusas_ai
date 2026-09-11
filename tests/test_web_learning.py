@@ -5,10 +5,26 @@ import unittest
 from unittest.mock import patch
 
 from lusas_ai.config import Settings
+from lusas_ai.control import update as update_control
 from lusas_ai.web_learning import MAX_CONTEXT_CHARS, context, refresh
 
 
 class WebLearningTests(unittest.TestCase):
+    def test_runtime_control_can_disable_web_refresh(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            settings = Settings(
+                root=root,
+                web_learning_enabled=True,
+                web_sources=("https://example.com/feed.xml",),
+                web_allowed_domains=("example.com",),
+            )
+            update_control(root, settings.autonomy_level, web_research_enabled=False)
+            with patch("lusas_ai.web_learning._fetch_source") as fetch:
+                result = refresh(settings, force=True)
+            self.assertEqual(result["status"], "disabled")
+            fetch.assert_not_called()
+
     def test_refresh_stores_bounded_article_and_training_record(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -34,8 +50,10 @@ class WebLearningTests(unittest.TestCase):
             self.assertEqual(result["new_items"], 1)
             stored = json.loads(settings.web_cache_path.read_text().splitlines()[0])
             training = json.loads(settings.web_training_path.read_text().splitlines()[0])
+            knowledge = json.loads(settings.knowledge_path.read_text().splitlines()[0])
             self.assertEqual(stored["title"], "Python release")
             self.assertEqual(stored["verification_status"], "unverified")
+            self.assertEqual(knowledge["kind"], "web_evidence")
             self.assertIn("instruction", training)
             self.assertIn("untrusted", training["output"])
 

@@ -7,7 +7,13 @@ import time
 from typing import Any
 
 from .config import Settings
+from .control import read as read_control
+from .engine import read_cycles
+from .gaps import prioritized
+from .knowledge import is_outdated, records as knowledge_records
 from .learning import LearningStore
+from .scorecard import history as scorecard_history
+from .skills import ensure_builtin
 from .upgrade_log import current_count, format_version
 from .version_registry import bootstrap_legacy
 
@@ -32,6 +38,12 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
     """Return a JSON-serializable, HTTP-free local upgrade dashboard."""
     upgrades = _read_events(settings.upgrade_log_path)
     progress = _read_events(settings.progress_path)
+    controls = read_control(settings.root, settings.autonomy_level)
+    knowledge = knowledge_records(settings)
+    skills = ensure_builtin(settings)
+    gaps = prioritized(settings)
+    cycles = read_cycles(settings)
+    scorecards = scorecard_history(settings)
     state = {"upgrade_count": current_count(settings.upgrade_state_path)}
     versions_path = settings.root / ".lusas" / "versions.jsonl"
     lessons_path = settings.root / ".lusas" / "lessons.jsonl"
@@ -41,6 +53,8 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
             "evolution_enabled": settings.evolution_enabled,
             "auto_apply_upgrades": settings.auto_apply_upgrades,
             "auto_code_upgrades": settings.auto_code_upgrades,
+            "autonomy_level": controls["autonomy_level"],
+            "runtime": controls,
         },
         "upgrade_count": state.get("upgrade_count", 0),
         "current_version": format_version(int(state.get("upgrade_count", 0))),
@@ -48,7 +62,32 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
             "enabled": settings.web_learning_enabled,
             "interval_minutes": settings.web_refresh_interval_minutes,
             "cached_articles": sum(1 for _ in settings.web_cache_path.read_text(encoding="utf-8").splitlines()) if settings.web_cache_path.exists() else 0,
+            "knowledge_items": len(knowledge),
+            "verified_items": sum(1 for item in knowledge if item.get("verification") == "corroborated"),
+            "outdated_items": sum(1 for item in knowledge if is_outdated(item)),
         },
+        "knowledge": {
+            "total": len(knowledge),
+            "verified": sum(1 for item in knowledge if item.get("verification") == "corroborated"),
+            "outdated": sum(1 for item in knowledge if is_outdated(item)),
+            "domains": sorted({str(item.get("domain", "general")) for item in knowledge}),
+        },
+        "knowledge_graph": {
+            "nodes": len(knowledge),
+            "edges": sum(len(item.get("concepts", [])) for item in knowledge),
+        },
+        "knowledge_gaps": {
+            "open": len([item for item in gaps if item.get("status", "open") == "open"]),
+            "items": gaps[:recent],
+        },
+        "skills": {
+            "total": len(skills),
+            "verified": sum(1 for item in skills if item.get("last_verified")),
+            "items": skills,
+        },
+        "scorecard": scorecards[-1] if scorecards else None,
+        "current_evolution": cycles[-1] if cycles else None,
+        "evolution_cycles": cycles[-recent:],
         "versions": bootstrap_legacy(versions_path, upgrades)[-recent:],
         "lessons_count": len(_read_events(lessons_path)),
         "regressions_count": len(_read_events(regressions_path)),
@@ -60,6 +99,9 @@ def report(settings: Settings, recent: int = 10) -> dict[str, Any]:
 
 def snapshot(settings: Settings, recent: int = 10) -> str:
     learned = LearningStore(settings.learning_path).examples()
+    knowledge = knowledge_records(settings)
+    gaps = prioritized(settings)
+    controls = read_control(settings.root, settings.autonomy_level)
     events = _read_events(settings.notification_path)
     upgrades = _read_events(settings.upgrade_log_path)
     state = (
@@ -75,6 +117,9 @@ def snapshot(settings: Settings, recent: int = 10) -> str:
         f"Successful upgrades: {state.get('upgrade_count', 0)}",
         f"Current version: {format_version(int(state.get('upgrade_count', 0)))}",
         f"Web articles cached: {settings.web_cache_path.read_text(encoding='utf-8').count(chr(10)) if settings.web_cache_path.exists() else 0}",
+        f"Knowledge: {len(knowledge)} items, {sum(1 for item in knowledge if item.get('verification') == 'corroborated')} verified",
+        f"Open knowledge gaps: {len([item for item in gaps if item.get('status', 'open') == 'open'])}",
+        f"Autonomy level: {controls['autonomy_level']}/5",
     ]
     if learned:
         lines.append("\nLearned examples:")

@@ -10,6 +10,7 @@ import sys
 from typing import Mapping
 
 from .config import Settings
+from .control import automatic_deploy_allowed, read as read_control
 from .notifications import notify
 
 
@@ -159,12 +160,20 @@ def perform_upgrade(
     apply: bool = False,
 ) -> UpgradeResult:
     root = settings.root
+    controls = read_control(root, settings.autonomy_level)
+    if controls.get("emergency_stop") or controls.get("production_locked"):
+        raise ValueError("Self-upgrade is blocked by runtime production controls.")
+    if apply and controls.get("upgrades_paused"):
+        raise ValueError("Self-upgrade is paused by runtime production controls.")
     backup_path = create_backup(root)
     staging_path = stage_candidate(root, changes)
     tests = run_tests(staging_path)
     applied = False
 
-    if tests.passed and (apply or settings.auto_apply_upgrades):
+    automatic_deploy = (
+        settings.auto_apply_upgrades and automatic_deploy_allowed(controls)
+    )
+    if tests.passed and (apply or automatic_deploy):
         apply_candidate(root, staging_path)
         applied = True
 

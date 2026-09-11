@@ -1,8 +1,10 @@
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
 from lusas_ai.config import Settings
+from lusas_ai.control import update as update_control
 from lusas_ai.evolution import (
     CandidateWorkspace,
     EvolutionOrchestrator,
@@ -99,6 +101,42 @@ class EvolutionTests(unittest.TestCase):
             history = settings.upgrade_log_path.read_text(encoding="utf-8")
             self.assertIn('"diff_path"', history)
             self.assertIn('"metrics"', history)
+
+    def test_complete_successful_evolution_promotes_a_better_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = root / "lusas_ai"
+            tests = root / "tests"
+            package.mkdir()
+            tests.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (tests / "test_value.py").write_text(
+                "import unittest\n"
+                "from lusas_ai.value import VALUE\n"
+                "class ValueTests(unittest.TestCase):\n"
+                "    def test_value(self): self.assertEqual(VALUE, 2)\n",
+                encoding="utf-8",
+            )
+            model = FakeModel(
+                '{"summary":"promote verified value","files":'
+                '{"lusas_ai/value.py":"VALUE = 2\\n",'
+                '"tests/test_new_value.py":"import unittest\\n\\n'
+                'class NewValueTests(unittest.TestCase):\\n'
+                '    def test_new_value(self): self.assertEqual(2, 2)\\n"}}'
+            )
+            settings = Settings(root=root)
+            update_control(root, settings.autonomy_level, autonomy_level=5)
+            result = EvolutionOrchestrator(settings, model).run(
+                "promote the verified value", apply=True
+            )
+            self.assertEqual(result.status, "promoted")
+            self.assertTrue(result.metrics and result.metrics.score > 1.0)
+            self.assertEqual((package / "value.py").read_text(encoding="utf-8"), "VALUE = 2\n")
+            self.assertTrue(result.backup and result.backup.exists())
+            self.assertEqual(
+                json.loads(settings.upgrade_state_path.read_text(encoding="utf-8"))["upgrade_count"],
+                1,
+            )
 
     def test_progress_callback_and_report_file_are_visible(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

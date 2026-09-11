@@ -14,9 +14,21 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from lusas_ai.config import Settings
 from lusas_ai.agent import LusasAgent, ProposalError
+from lusas_ai.audit import run as run_audit
 from lusas_ai.cycle_state import fingerprint, read as read_cycle_state, write as write_cycle_state
+from lusas_ai.control import (
+    automatic_deploy_allowed,
+    code_evolution_allowed,
+    model_learning_allowed,
+    read as read_control,
+    web_research_allowed,
+)
 from lusas_ai.lessons import record_failure
 from lusas_ai.notifications import notify
+from lusas_ai.engine import EvolutionEngine
+from lusas_ai.gaps import detect as detect_gaps, record as record_gap
+from lusas_ai.scorecard import record as record_scorecard
+from lusas_ai.skills import ensure_builtin, record_use
 from lusas_ai.upgrade_log import current_count, format_version, next_version, record
 from lusas_ai.version_registry import append_version
 from lusas_ai.web_learning import refresh as refresh_web
@@ -53,7 +65,9 @@ def _training_records(root: Path, settings: Settings) -> list[dict[str, object]]
     return records
 
 
-def _run_code_evolution(root: Path, settings: Settings) -> dict[str, object]:
+def _run_code_evolution(
+    root: Path, settings: Settings, apply: bool
+) -> dict[str, object]:
     """Run source evolution independently of whether model data changed."""
     if not settings.evolution_enabled or not settings.auto_code_upgrades:
         return {"status": "disabled"}
@@ -63,7 +77,7 @@ def _run_code_evolution(root: Path, settings: Settings) -> dict[str, object]:
             "Review the LUSAS source for one small, measurable reliability, "
             "testability, or performance improvement. Return no change if "
             "there is no safe improvement.",
-            apply=settings.auto_apply_upgrades,
+            apply=apply,
             progress_callback=lambda event: print(
                 f"[evolve:{event.phase}] {event.message}", flush=True
             ),
@@ -73,6 +87,10 @@ def _run_code_evolution(root: Path, settings: Settings) -> dict[str, object]:
                 "status": result.status,
                 "summary": result.summary,
                 "tests_passed": bool(result.metrics and result.metrics.tests_passed),
+                "benchmark_seconds": (
+                    result.metrics.benchmark_seconds if result.metrics else None
+                ),
+                "score": result.metrics.score if result.metrics else None,
                 "files": sorted(result.files),
             }
         return {"status": result.status, "reason": result.reason}
@@ -100,18 +118,74 @@ def _interval_due(last_run: object, interval_minutes: int) -> bool:
 
 def run_once(root: Path) -> dict:
     settings = Settings.load(root)
-    code_loop_enabled = settings.evolution_enabled and settings.auto_code_upgrades
-    web_loop_enabled = settings.web_learning_enabled
-    if not settings.auto_model_upgrades and not code_loop_enabled and not web_loop_enabled:
+    controls = read_control(root, settings.autonomy_level)
+    if controls.get("emergency_stop", False):
+        progress("emergency stop is active; cycle halted")
+        return {"status": "stopped", "reason": "emergency stop is active"}
+    model_loop_enabled = (
+        settings.auto_model_upgrades
+        and model_learning_allowed(controls)
+        and not controls.get("upgrades_paused", False)
+    )
+    code_loop_enabled = (
+        settings.evolution_enabled
+        and settings.auto_code_upgrades
+        and code_evolution_allowed(controls)
+    )
+    web_loop_enabled = settings.web_learning_enabled and web_research_allowed(controls)
+    auto_deploy = settings.auto_apply_upgrades and automatic_deploy_allowed(controls)
+    if not model_loop_enabled and not code_loop_enabled and not web_loop_enabled:
         return {"status": "disabled"}
 
+    engine = EvolutionEngine(settings)
+    cycle = engine.begin()
     started_at = datetime.now(timezone.utc).isoformat()
-    progress("cycle started")
-    web_result = refresh_web(settings) if settings.web_learning_enabled else {
+    progress("cycle started", evolution_id=cycle.evolution_id)
+    engine.phase(cycle, "health_check", status="started")
+    audit_result = run_audit(settings, evolution_id=cycle.evolution_id)
+    engine.phase(
+        cycle,
+        "audit",
+        status=audit_result["status"],
+        findings=len(audit_result.get("findings", [])),
+    )
+    progress(
+        "self-audit complete",
+        evolution_id=cycle.evolution_id,
+        status=audit_result["status"],
+        findings=len(audit_result.get("findings", [])),
+    )
+    skills = ensure_builtin(settings)
+    engine.phase(cycle, "skill_registry", skills=len(skills))
+    initial_gaps = detect_gaps(settings, audit_result)
+    engine.phase(cycle, "knowledge_gap_detection", open_gaps=len(initial_gaps))
+    web_result = refresh_web(settings) if web_loop_enabled else {
         "status": "disabled", "new_items": 0
     }
     progress("web learning checked", **web_result)
+    if web_loop_enabled and web_result.get("status") in {"refreshed", "skipped"}:
+        record_use(
+            settings,
+            "bounded_web_research",
+            succeeded=not bool(web_result.get("errors")),
+        )
+    if web_result.get("errors"):
+        record_failure(
+            root,
+            "web-research",
+            "One or more configured research sources failed.",
+            evolution_id=cycle.evolution_id,
+            errors=web_result.get("errors"),
+        )
+    engine.phase(
+        cycle,
+        "research",
+        status=web_result.get("status"),
+        new_items=web_result.get("new_items", 0),
+        knowledge_items=web_result.get("knowledge_items", 0),
+    )
     records = _training_records(root, settings)
+    engine.phase(cycle, "learning", training_examples=len(records))
     base_data_path = root / "training" / "data" / "examples.jsonl"
     eval_path = root / "training" / "data" / "eval.jsonl"
     input_fingerprint = fingerprint(
@@ -134,7 +208,7 @@ def run_once(root: Path) -> dict:
     model_upgrade: dict[str, object] = {"status": "disabled"}
     data_path: Path | None = None
 
-    if settings.auto_model_upgrades:
+    if model_loop_enabled:
         if inputs_unchanged:
             progress("training inputs unchanged; skipping model training")
             record(
@@ -201,7 +275,7 @@ def run_once(root: Path) -> dict:
                 json.dumps(report, indent=2) + "\n", encoding="utf-8"
             )
 
-            if quality_passed:
+            if quality_passed and auto_deploy:
                 progress("promoting validated model")
                 backup = promote(candidate, root, evaluation_passed=True)
                 progress("checking deployed model health")
@@ -321,6 +395,51 @@ def run_once(root: Path) -> dict:
                         "improvement": improvement,
                     },
                 )
+            elif quality_passed:
+                reason = "candidate passed; automatic deployment is paused"
+                notify(
+                    root,
+                    settings.notification_path,
+                    "Automatic model upgrade staged but not deployed.",
+                    candidate=str(candidate),
+                    score=report["score"],
+                    baseline_score=baseline_score,
+                    improvement=improvement,
+                    reason=reason,
+                )
+                record(
+                    settings.upgrade_log_path,
+                    time=started_at,
+                    status="staged",
+                    version=None,
+                    candidate=str(candidate),
+                    score=report["score"],
+                    baseline_score=baseline_score,
+                    improvement=improvement,
+                    learned_examples=len(records),
+                    web_new_items=web_result.get("new_items", 0),
+                    reason=reason,
+                )
+                write_cycle_state(
+                    settings.cycle_state_path,
+                    {
+                        "input_fingerprint": input_fingerprint,
+                        "learned_examples": len(records),
+                        "version": None,
+                        "last_status": "staged",
+                        "candidate_score": report["score"],
+                        "baseline_score": baseline_score,
+                        "improvement": improvement,
+                    },
+                )
+                model_upgrade = {
+                    "status": "staged",
+                    "candidate": str(candidate),
+                    "score": report["score"],
+                    "baseline_score": baseline_score,
+                    "improvement": improvement,
+                    "reason": reason,
+                }
             else:
                 notify(
                     root,
@@ -365,8 +484,14 @@ def run_once(root: Path) -> dict:
                 }
             data_path.unlink(missing_ok=True)
 
+    engine.phase(
+        cycle,
+        "evaluation",
+        model_status=model_upgrade.get("status"),
+        model_score=model_upgrade.get("score"),
+    )
     if code_due:
-        code_upgrade = _run_code_evolution(root, settings)
+        code_upgrade = _run_code_evolution(root, settings, apply=auto_deploy)
     elif code_loop_enabled:
         code_upgrade = {
             "status": "skipped",
@@ -374,6 +499,9 @@ def run_once(root: Path) -> dict:
         }
     else:
         code_upgrade = {"status": "disabled"}
+    engine.phase(cycle, "testing", code_status=code_upgrade.get("status"))
+    engine.phase(cycle, "benchmark", code_score=code_upgrade.get("score"))
+    engine.phase(cycle, "experiment", model=model_upgrade, code=code_upgrade)
     if code_due:
         latest_state = read_cycle_state(settings.cycle_state_path)
         latest_state.update(
@@ -385,6 +513,28 @@ def run_once(root: Path) -> dict:
         write_cycle_state(settings.cycle_state_path, latest_state)
     model_status = str(model_upgrade.get("status", "disabled"))
     code_status = str(code_upgrade.get("status", "disabled"))
+    if model_status in {"promoted", "staged", "rejected", "rolled_back"}:
+        record_use(
+            settings,
+            "local_model_training",
+            succeeded=model_status in {"promoted", "staged"},
+            benchmark_score=(
+                float(model_upgrade["score"])
+                if model_upgrade.get("score") is not None
+                else None
+            ),
+        )
+    if code_due:
+        record_use(
+            settings,
+            "sandboxed_code_evolution",
+            succeeded=code_status in {"promoted", "staged"},
+            benchmark_score=(
+                float(code_upgrade["score"])
+                if code_upgrade.get("score") is not None
+                else None
+            ),
+        )
     if "promoted" in {model_status, code_status}:
         status = "promoted"
     elif "rolled_back" in {model_status, code_status}:
@@ -395,12 +545,78 @@ def run_once(root: Path) -> dict:
         status = "skipped"
     else:
         status = code_status if code_status != "disabled" else model_status
+    if model_status in {"rejected", "rolled_back"}:
+        record_failure(
+            root,
+            "model-quality-gate",
+            str(model_upgrade.get("reason", "The model candidate did not pass its quality gate.")),
+            evolution_id=cycle.evolution_id,
+            candidate=model_upgrade.get("candidate"),
+            score=model_upgrade.get("score"),
+        )
+        record_gap(
+            settings,
+            "model-quality",
+            str(model_upgrade.get("reason", "The model candidate did not pass its quality gate.")),
+            priority=0.75,
+            evidence={"model_upgrade": model_upgrade},
+        )
+    if code_status == "rejected":
+        record_failure(
+            root,
+            "code-evolution-gate",
+            str(code_upgrade.get("reason", code_upgrade.get("error", "The code candidate was rejected."))),
+            evolution_id=cycle.evolution_id,
+            files=code_upgrade.get("files", []),
+        )
+        record_gap(
+            settings,
+            "code-evolution",
+            str(code_upgrade.get("reason", code_upgrade.get("error", "The code candidate was rejected."))),
+            priority=0.8,
+            evidence={"code_upgrade": code_upgrade},
+        )
+    gaps = detect_gaps(settings, audit_result)
+    current_version = format_version(current_count(settings.upgrade_state_path))
+    scorecard = record_scorecard(
+        settings,
+        version=current_version,
+        evolution_id=cycle.evolution_id,
+        audit_result=audit_result,
+        model_upgrade=model_upgrade,
+        code_upgrade=code_upgrade,
+    )
+    engine.phase(
+        cycle,
+        "monitor",
+        version=current_version,
+        overall_score=scorecard.get("overall_score"),
+        measured_dimensions=scorecard.get("measured_dimensions"),
+    )
+    engine.complete(
+        cycle,
+        status=status,
+        version=current_version,
+        audit_status=audit_result.get("status"),
+        open_knowledge_gaps=len(gaps),
+        knowledge_items=web_result.get("knowledge_items", 0),
+        model_upgrade=model_upgrade,
+        code_upgrade=code_upgrade,
+        scorecard={
+            "overall_score": scorecard.get("overall_score"),
+            "measured_dimensions": scorecard.get("measured_dimensions"),
+        },
+    )
     return {
         "status": status,
+        "evolution_id": cycle.evolution_id,
         "model_upgrade": model_upgrade,
         "code_upgrade": code_upgrade,
         "learned_examples": len(records),
         "web_new_items": web_result.get("new_items", 0),
+        "audit": audit_result,
+        "knowledge_gaps": len(gaps),
+        "scorecard": scorecard,
     }
 
 
