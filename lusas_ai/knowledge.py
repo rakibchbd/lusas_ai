@@ -416,10 +416,19 @@ def seed_context(query: str, limit: int = 5) -> str:
 
 def ground_response(query: str, response: str, supplied_context: str) -> str:
     """Drop unsupported biography claims while preserving the model's wording."""
-    from .identity import is_creator_question
+    from .identity import (
+        FIRST_PERSON_PERSON_IDENTIFICATION,
+        is_creator_question,
+        is_person_identity_question,
+    )
 
-    if not supplied_context or not is_creator_question(query):
+    identity_query = is_creator_question(query) or is_person_identity_question(query)
+    if not supplied_context or not identity_query:
         return response.strip()
+    if not response.strip() or response.strip().lower() == "i could not produce a clean answer. please try again.":
+        if is_person_identity_question(query):
+            return _person_identity_fallback(query, supplied_context)
+        return "I don't know that detail yet."
     context_terms = _terms(supplied_context)
     sentences = [
         sentence.strip()
@@ -429,6 +438,11 @@ def ground_response(query: str, response: str, supplied_context: str) -> str:
     grounded: list[str] = []
     for sentence in sentences:
         sentence_lower = sentence.lower()
+        if (
+            is_person_identity_question(query)
+            and FIRST_PERSON_PERSON_IDENTIFICATION.search(sentence)
+        ):
+            continue
         if any(
             marker in sentence_lower and marker not in supplied_context.lower()
             for marker in _UNSUPPORTED_PERSONAL_CLAIMS
@@ -443,15 +457,62 @@ def ground_response(query: str, response: str, supplied_context: str) -> str:
         # hallucination, so omit it instead of presenting it as known.
         if len(unknown_terms) <= max(4, len(sentence_terms) // 2):
             grounded.append(sentence)
-    return " ".join(grounded).strip() or "I don't know that detail yet."
+    result = " ".join(grounded).strip()
+    if result:
+        return result
+    if is_person_identity_question(query):
+        return _person_identity_fallback(query, supplied_context)
+    return "I don't know that detail yet."
+
+
+def _person_identity_fallback(query: str, supplied_context: str) -> str:
+    """Render a concise answer from the structured facts if generation fails."""
+    query_lower = query.lower()
+    if "rakib" in query_lower:
+        person = "Rakib Chowdhury"
+        pronoun = "his"
+    else:
+        person = "Lusa Chowdhury (Rakib)"
+        pronoun = "his"
+
+    context_lower = supplied_context.lower()
+    parts: list[str] = []
+    if "lusas ai creator" in context_lower:
+        parts.append(f"{person} is the creator and developer of LUSAS AI.")
+    if "childhood nickname" in context_lower:
+        parts.append(f"Lusa is {pronoun} childhood nickname.")
+    asks_about_background = bool(
+        _terms(query).intersection(
+            {"background", "experience", "profession", "work", "career", "technical"}
+        )
+    )
+    if asks_about_background and "technical background" in context_lower:
+        parts.append(
+            "His background includes web development, Python, machine learning, "
+            "systems engineering, servers, hosting, deployment, and backend technologies."
+        )
+    return " ".join(parts) or "I don't know that detail yet."
 
 
 def needs_response_repair(
     query: str, response: str, supplied_context: str = ""
 ) -> bool:
     """Detect a likely unrelated project-identity tangent in a model answer."""
+    from .identity import FIRST_PERSON_PERSON_IDENTIFICATION, is_person_identity_question
+
     if supplied_context:
-        return False
+        if not is_person_identity_question(query):
+            return False
+        response_lower = response.lower()
+        wrong_perspective = FIRST_PERSON_PERSON_IDENTIFICATION.search(response)
+        missing_project_relationship = not (
+            "lusas" in response_lower
+            and any(
+                role in response_lower
+                for role in ("creator", "created", "developer", "developed", "founder")
+            )
+        )
+        return bool(wrong_perspective or missing_project_relationship)
     query_terms = _terms(query)
     if query_terms.intersection({"lusa", "lusas", "rakib"}):
         return False

@@ -19,6 +19,19 @@ CREATOR_QUESTION = re.compile(
 )
 
 
+PERSON_IDENTITY_QUESTION = re.compile(
+    r"\b(?:who|what)\s+is\s+(?:rakib(?:\s+chowdhury)?|lusa(?:\s+chowdhury)?)\b"
+    r"|\btell\s+me\s+about\s+(?:rakib(?:\s+chowdhury)?|lusa(?:\s+chowdhury)?)\b",
+    re.IGNORECASE,
+)
+
+
+FIRST_PERSON_PERSON_IDENTIFICATION = re.compile(
+    r"\bI\s+(?:am|'m|was)\s+(?:Rakib(?:\s+Chowdhury)?|Lusa(?:\s+Chowdhury)?)\b",
+    re.IGNORECASE,
+)
+
+
 _INTERNAL_TAIL = re.compile(
     r"\s*(?:###\s*System:|System instructions:|Workspace context:|"
     r"###\s*Instruction:|an\s+internal\s+provider\s+policy\b|"
@@ -40,3 +53,7 @@ def strip_internal_prompt_leak(response: str) -> str:
 
 def is_creator_question(prompt: str) -> bool:
     return bool(CREATOR_QUESTION.search(prompt))
+
+
+def is_person_identity_question(prompt: str) -> bool:
+    return bool(PERSON_IDENTITY_QUESTION.search(prompt))

@@ -65,6 +65,55 @@ class AgentIdentityTests(unittest.TestCase):
             )
             self.assertIn("Knowledge status: user_provided", captured[0])
 
+    def test_named_person_question_is_answered_in_third_person(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            responses = iter(
+                (
+                    "I am Rakib Chowdhury, created and developed by Lusa Chowdhury (Rakib).",
+                    "Rakib Chowdhury is the creator and developer of LUSAS AI. Lusa is his childhood nickname.",
+                )
+            )
+            captured: list[str] = []
+
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    captured.append(prompt)
+                    return next(responses)
+
+            agent.model = FakeModel()
+            response = agent.chat("who is rakib")
+            self.assertEqual(
+                response,
+                "Rakib Chowdhury is the creator and developer of LUSAS AI. "
+                "Lusa is his childhood nickname.",
+            )
+            self.assertEqual(len(captured), 1)
+            self.assertIn("third person", captured[0])
+            self.assertNotIn("I am Rakib", response)
+
+    def test_named_person_answer_is_repaired_when_project_relationship_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            responses = iter(
+                (
+                    "Rakib Chowdhury is a local AI founder and creator.",
+                    "Rakib Chowdhury is the creator and developer of LUSAS AI.",
+                )
+            )
+            captured: list[str] = []
+
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    captured.append(prompt)
+                    return next(responses)
+
+            agent.model = FakeModel()
+            response = agent.chat("who is rakib")
+            self.assertEqual(response, "Rakib Chowdhury is the creator and developer of LUSAS AI.")
+            self.assertEqual(len(captured), 2)
+            self.assertIn("third person", captured[1])
+
     def test_developer_question_receives_only_creator_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))

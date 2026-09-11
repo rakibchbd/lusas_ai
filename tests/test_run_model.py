@@ -71,6 +71,24 @@ class TrainedModelIdentityTests(unittest.TestCase):
         self.assertIn("Lusa Chowdhury (Rakib)", formatted)
         self.assertNotIn("ChatGPT", formatted)
 
+    def test_named_person_question_does_not_return_first_person_identity(self) -> None:
+        tokenizer = self.FakeTokenizer()
+
+        def decode(_: object, skip_special_tokens: bool = True) -> str:
+            return "I am Rakib Chowdhury, created and developed by Lusa Chowdhury (Rakib)."
+
+        tokenizer.decode = decode  # type: ignore[method-assign]
+        response = generate_loaded(
+            self.FakeTorch(),
+            tokenizer,
+            self.FakeModel(),
+            "cpu",
+            "who is rakib",
+            128,
+        )
+        self.assertIn("Rakib Chowdhury", response)
+        self.assertNotIn("I am Rakib", response)
+
     def test_indirect_creator_question_gets_context_without_fixed_answer(self) -> None:
         response, formatted = self._generate("who the maker is?")
         self.assertEqual(response, "Lusa Chowdhury (Rakib) created LUSAS AI.")

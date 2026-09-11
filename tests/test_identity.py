@@ -1,6 +1,11 @@
 import unittest
 
-from lusas_ai.identity import CREATOR_QUESTION, is_creator_question
+from lusas_ai.identity import (
+    CREATOR_QUESTION,
+    PERSON_IDENTITY_QUESTION,
+    is_creator_question,
+    is_person_identity_question,
+)
 
 
 class IdentityIntentTests(unittest.TestCase):
@@ -21,6 +26,13 @@ class IdentityIntentTests(unittest.TestCase):
     def test_unrelated_questions_are_not_creator_questions(self) -> None:
         for prompt in ("What is Python?", "Explain recursion", "Write a CLI tool"):
             with self.subTest(prompt=prompt):
+                self.assertFalse(is_creator_question(prompt))
+
+    def test_named_person_questions_are_classified_separately(self) -> None:
+        for prompt in ("Who is Rakib?", "Who is Rakib Chowdhury?", "Tell me about Lusa"):
+            with self.subTest(prompt=prompt):
+                self.assertTrue(PERSON_IDENTITY_QUESTION.search(prompt))
+                self.assertTrue(is_person_identity_question(prompt))
                 self.assertFalse(is_creator_question(prompt))
 
 
