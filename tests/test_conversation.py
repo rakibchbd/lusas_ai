@@ -36,6 +36,15 @@ class ConversationTests(unittest.TestCase):
         self.assertIn("Lira 1.0", response)
         self.assertNotIn("100000000", response)
 
+    def test_basic_arithmetic_does_not_require_model_weights(self) -> None:
+        self.assertIn("154", quick_response("what is 67+87") or "")
+        self.assertIn("49", quick_response("calculate 7 * (3 + 4)") or "")
+        self.assertIn("2.5", quick_response("12.5 / 5") or "")
+
+    def test_arithmetic_path_does_not_execute_expressions(self) -> None:
+        self.assertIsNone(quick_response("__import__('os').system('touch /tmp/lusas')"))
+        self.assertIsNone(quick_response("2 ** 1000"))
+
     def test_specific_questions_still_use_the_model(self) -> None:
         self.assertIsNone(quick_response("What is Python?"))
         self.assertIsNone(quick_response("Write a Python function"))

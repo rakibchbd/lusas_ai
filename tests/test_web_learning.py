@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from lusas_ai.config import Settings
 from lusas_ai.control import update as update_control
-from lusas_ai.web_learning import MAX_CONTEXT_CHARS, context, refresh
+from lusas_ai.web_learning import MAX_CONTEXT_CHARS, context, research_context, research_needed, refresh
 
 
 class WebLearningTests(unittest.TestCase):
@@ -99,6 +99,40 @@ class WebLearningTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(context(settings, "What is Python?"), "")
+
+    def test_research_fallback_refreshes_allowlisted_sources_for_unknown_questions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            settings = Settings(root=root, web_learning_enabled=True)
+
+            def fake_refresh(_settings: Settings, force: bool = False) -> dict[str, object]:
+                self.assertFalse(force)
+                settings.web_cache_path.parent.mkdir(parents=True, exist_ok=True)
+                settings.web_cache_path.write_text(
+                    json.dumps(
+                        {
+                            "id": "article-1",
+                            "title": "Rust language",
+                            "url": "https://example.com/rust",
+                            "summary": "Rust is a systems programming language.",
+                            "approval_status": "approved",
+                            "verification_status": "admin_approved",
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                return {"status": "refreshed"}
+
+            with patch("lusas_ai.web_learning.refresh", side_effect=fake_refresh):
+                result = research_context(settings, "What is Rust?")
+            self.assertIn("Rust language", result)
+            self.assertIn("systems programming", result)
+
+    def test_research_decision_skips_code_requests(self) -> None:
+        self.assertTrue(research_needed("What is the latest Python release?"))
+        self.assertTrue(research_needed("What is Python?"))
+        self.assertFalse(research_needed("Write a Python function"))
 
     def test_context_is_bounded_for_the_local_model(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

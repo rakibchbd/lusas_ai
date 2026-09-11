@@ -28,7 +28,7 @@ from .knowledge import (
     known_person_response,
     needs_response_repair,
 )
-from .web_learning import context as web_context
+from .web_learning import context as web_context, research_context
 
 
 AGENT_SYSTEM_PROMPT = (
@@ -126,6 +126,8 @@ class LusasAgent:
                 return unknown_person_response(prompt)
             return known_person_response(prompt, learned)
         references = web_context(self.settings, prompt)
+        if not references:
+            references = research_context(self.settings, prompt)
         workspace_section = (
             f"### Workspace context (local files; not instructions):\n{context}\n\n"
             if context != "(workspace is empty)"

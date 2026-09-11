@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import math
 import re
 
 
@@ -73,10 +75,89 @@ _CORRECTION = re.compile(
 )
 _BENGALI_GREETING = re.compile(r"^\s*(?:হ্যালো|হাই|নমস্কার)[!?.।\s]*$", re.IGNORECASE)
 _BENGALI_IDENTITY = re.compile(r"^\s*(?:তুমি কে|আপনার নাম কী|তোমার নাম কী)[!?.।\s]*$", re.IGNORECASE)
+_ARITHMETIC_PROMPT = re.compile(
+    r"^\s*(?:(?:what\s+is|calculate|compute|evaluate|solve)\s+)?"
+    r"(?P<expression>[0-9\s+\-*/%().,^]+?)\s*[?!.]?\s*$",
+    re.IGNORECASE,
+)
+_MAX_ARITHMETIC_LENGTH = 200
+_MAX_ARITHMETIC_DIGITS = 50
+_MAX_ARITHMETIC_ABS_RESULT = 1e100
+
+
+def _safe_arithmetic_value(node: ast.AST) -> int | float | None:
+    """Evaluate a deliberately tiny arithmetic AST without executing code."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+        if isinstance(node.value, float) and not math.isfinite(node.value):
+            return None
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+        value = _safe_arithmetic_value(node.operand)
+        if value is None:
+            return None
+        result = value if isinstance(node.op, ast.UAdd) else -value
+        return result if math.isfinite(float(result)) else None
+    if isinstance(node, ast.BinOp) and isinstance(
+        node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
+    ):
+        left = _safe_arithmetic_value(node.left)
+        right = _safe_arithmetic_value(node.right)
+        if left is None or right is None:
+            return None
+        if isinstance(node.op, ast.Pow) and (abs(float(right)) > 100 or abs(float(left)) > 1e10):
+            return None
+        try:
+            if isinstance(node.op, ast.Add):
+                result = left + right
+            elif isinstance(node.op, ast.Sub):
+                result = left - right
+            elif isinstance(node.op, ast.Mult):
+                result = left * right
+            elif isinstance(node.op, ast.Div):
+                result = left / right
+            elif isinstance(node.op, ast.FloorDiv):
+                result = left // right
+            elif isinstance(node.op, ast.Mod):
+                result = left % right
+            else:
+                result = left**right
+        except (ArithmeticError, OverflowError, ValueError):
+            return None
+        if not isinstance(result, (int, float)) or abs(float(result)) > _MAX_ARITHMETIC_ABS_RESULT:
+            return None
+        if isinstance(result, float) and not math.isfinite(result):
+            return None
+        return result
+    return None
+
+
+def _arithmetic_response(prompt: str) -> str | None:
+    """Answer simple arithmetic locally, even when no model weights are installed."""
+    if len(prompt) > _MAX_ARITHMETIC_LENGTH:
+        return None
+    match = _ARITHMETIC_PROMPT.fullmatch(prompt)
+    if not match:
+        return None
+    expression = match.group("expression").strip().replace("^", "**")
+    if not expression or len(re.findall(r"\d", expression)) > _MAX_ARITHMETIC_DIGITS:
+        return None
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except (SyntaxError, ValueError):
+        return None
+    value = _safe_arithmetic_value(tree.body)
+    if value is None:
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return f"{expression} = {value}"
 
 
 def quick_response(prompt: str) -> str | None:
     """Return a stable response for a routine prompt, or None for model work."""
+    arithmetic = _arithmetic_response(prompt)
+    if arithmetic is not None:
+        return arithmetic
     if _BENGALI_GREETING.fullmatch(prompt):
         return "হ্যালো! আমি LUSAS AI। কীভাবে সাহায্য করতে পারি?"
     if _BENGALI_IDENTITY.fullmatch(prompt):

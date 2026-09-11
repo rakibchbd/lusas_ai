@@ -7,6 +7,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
+from lusas_ai.agent import LusasAgent
 from lusas_ai.web_ui import create_server
 
 
@@ -90,6 +91,20 @@ class WebUiTests(unittest.TestCase):
         response = self.connection.getresponse()
         self.assertEqual(response.status, 200)
         self.assertIn('"response": "Echo: hello (sara-1.0)"', response.read().decode("utf-8"))
+
+    def test_chat_endpoint_answers_arithmetic_without_model_installation(self) -> None:
+        self.server.agent = LusasAgent(Path(self.temporary.name))
+        self.connection.request(
+            "POST",
+            "/api/chat",
+            body='{"prompt":"what is 67+87","model_id":"lira-1.0"}',
+            headers={"Content-Type": "application/json"},
+        )
+        response = self.connection.getresponse()
+        body = response.read().decode("utf-8")
+        self.assertEqual(response.status, 200)
+        self.assertIn('"response": "67+87 = 154"', body)
+        self.assertIn('"model_id": "lira-1.0"', body)
 
     def test_chat_endpoint_rejects_empty_prompt(self) -> None:
         self.connection.request(

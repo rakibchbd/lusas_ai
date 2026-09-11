@@ -44,6 +44,25 @@ _RESEARCH_TERMS = {
     "update",
     "updates",
     "version",
+    "find",
+    "internet",
+    "look",
+    "lookup",
+    "online",
+    "search",
+    "verify",
+}
+_CODE_REQUEST_TERMS = {
+    "build",
+    "code",
+    "create",
+    "debug",
+    "function",
+    "generate",
+    "implement",
+    "program",
+    "script",
+    "write",
 }
 _SEARCH_STOPWORDS = {
     "about",
@@ -453,14 +472,27 @@ def search(settings: Settings, query: str, limit: int = 3) -> list[dict[str, str
     return [article for _, article in scored[:limit]]
 
 
-def context(settings: Settings, query: str, limit: int = 3) -> str:
-    query_terms = set(re.findall(r"[a-z0-9]{3,}", query.lower()))
-    if not query_terms.intersection(_RESEARCH_TERMS):
-        return ""
-    matches = search(settings, query, limit=limit)
+def research_needed(query: str) -> bool:
+    """Decide whether a question warrants bounded, allowlisted web research."""
+    normalized = query.lower()
+    terms = set(re.findall(r"[a-z0-9]{3,}", normalized)) - _SEARCH_STOPWORDS
+    if not terms or terms.intersection(_CODE_REQUEST_TERMS):
+        return False
+    if terms.intersection(_RESEARCH_TERMS):
+        return True
+    # A substantive question with no local match is eligible for the fallback.
+    # The caller still enforces the runtime switch and administrator source list.
+    return len(terms) >= 1
+
+
+def _approved_context(matches: list[dict[str, str]], limit: int = 3) -> str:
     result = ""
+    accepted = 0
     for item in matches:
-        if item.get("approval_status") != "approved" or item.get("verification_status") not in {"corroborated", "admin_approved"}:
+        if (
+            item.get("approval_status") != "approved"
+            or item.get("verification_status") not in {"corroborated", "admin_approved"}
+        ):
             continue
         chunk = (
             f"Approved web reference ({item.get('verification_status', 'uncertain')}): "
@@ -470,7 +502,40 @@ def context(settings: Settings, query: str, limit: int = 3) -> str:
         )
         separator = "\n\n" if result else ""
         remaining = MAX_CONTEXT_CHARS - len(result) - len(separator)
-        if remaining <= 0:
+        if remaining <= 0 or accepted >= max(1, limit):
             break
         result += separator + chunk[:remaining]
+        accepted += 1
     return result
+
+
+def context(settings: Settings, query: str, limit: int = 3) -> str:
+    query_terms = set(re.findall(r"[a-z0-9]{3,}", query.lower()))
+    if not query_terms.intersection(_RESEARCH_TERMS):
+        return ""
+    return _approved_context(search(settings, query, limit=limit), limit=limit)
+
+
+def research_context(settings: Settings, query: str, limit: int = 3) -> str:
+    """Research a question from approved sources and return verified references.
+
+    Cached approved evidence is preferred. If it is not enough, the configured
+    HTTPS sources are refreshed once. Newly collected records stay pending and
+    cannot become model-training data until reviewed and corroborated.
+    """
+    if not research_needed(query):
+        return ""
+    controls = read_control(settings.root, settings.autonomy_level)
+    if not settings.web_learning_enabled or not web_research_allowed(controls):
+        return ""
+    matches = search(settings, query, limit=limit)
+    result = _approved_context(matches, limit=limit)
+    if result:
+        return result
+    query_terms = set(re.findall(r"[a-z0-9]{3,}", query.lower()))
+    force_refresh = bool(query_terms.intersection(_RESEARCH_TERMS))
+    try:
+        refresh(settings, force=force_refresh)
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
+        return ""
+    return _approved_context(search(settings, query, limit=limit), limit=limit)

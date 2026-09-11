@@ -163,6 +163,12 @@ after reviewing the configuration:
 python3 -m lusas_ai service install
 ~~~
 
+For a normal question that has no local knowledge, LUSAS performs a bounded
+research fallback over the configured administrator-approved HTTPS sources. It
+prefers verified cached evidence, records provenance, and keeps newly fetched
+records pending until review. Deterministic arithmetic such as `67+87` is
+answered locally and never requires Sara or Lira weights.
+
 ## Project limits
 
 This repository supplies orchestration and model-adapter training, not a

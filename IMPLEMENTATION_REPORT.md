@@ -13,6 +13,18 @@ The former single-model artifact tree was removed. `models/` now contains only
 `.gitkeep`; official model artifacts are created only after explicit foundation
 configuration and approved training.
 
+Removed legacy components include the former single-model weights and
+production/candidate/backup layout, legacy model configuration and loading
+logic, implicit fallback behavior, obsolete training dependencies and command
+flags, old UI/documentation labels, and their regression-test fixtures. A
+repository audit contains no legacy model identifiers or production artifact
+paths.
+
+Routine interactions do not require model weights. The local conversation
+fast path answers greetings, identity/capability questions, and safe basic
+arithmetic (for example, `what is 67+87`), so an uninstalled model cannot turn
+a deterministic question into a misleading installation error.
+
 ## Architecture
 
 `model_registry.py` is the single source of truth for public names, IDs,
@@ -46,6 +58,13 @@ Automatic worker cycles can gather approved-source data, train, evaluate, and
 stage candidates. They never promote candidates. Source-code evolution remains
 separately bounded and tested.
 
+When a non-routine question has no local answer, the agent can perform a
+bounded fallback research pass over configured administrator-approved HTTPS
+sources. It prefers cached approved evidence, refreshes within the configured
+interval, preserves source URLs and verification status, and treats fetched
+content as reference data rather than instructions. New material remains
+pending until administrator review and corroboration.
+
 ## Created and modified files
 
 Created:
@@ -58,13 +77,14 @@ Created:
 - `web/admin.js`
 - `tests/test_model_registry.py`
 - `tests/test_data_pipeline.py`
+- `.env.example`
 - `IMPLEMENTATION_REPORT.md`
 
 Updated:
 
 - `config.json`, `README.md`, `training/README.md`, and training datasets
 - `lusas_ai/config.py`, `agent.py`, `conversation.py`, `knowledge.py`,
-  `local_model.py`, `monitor.py`, and `web_ui.py`
+  `local_model.py`, `monitor.py`, `web_learning.py`, and `web_ui.py`
 - `training/train_lora.py`, `evaluate_model.py`, `run_model.py`,
   `model_lifecycle.py`, and `auto_upgrade.py`
 - `web/index.html`, `web/app.js`, and `web/styles.css`
@@ -77,6 +97,9 @@ Updated:
 - `LUSAS_ADMIN_TOKEN` for the local administration API
 - `HF_TOKEN` only when the explicitly configured foundation needs authenticated
   model downloads
+
+`.env.example` lists these variables without values. Real `.env` files are
+ignored by Git.
 
 Foundation settings are intentionally blank in `config.json`; no foundation
 or model weights are bundled or selected silently.
@@ -124,13 +147,14 @@ Run the web UI with `python3 -m lusas_ai web`, then open
 
 ## Verification
 
-- Python unit/integration suite: **94 tests passed**.
+- Python unit/integration suite: **99 tests passed**.
 - Python bytecode compilation: passed.
 - `web/app.js` and `web/admin.js` syntax checks: passed.
 - Config and training JSON/JSONL validation: passed.
 - Localhost smoke test: model catalog returned both official IDs; chat included
   the selected ID; known founder questions returned grounded third-person
-  answers; unknown people did not trigger scraping or code generation.
+  answers; unknown people did not trigger scraping or code generation; both
+  model selections answered `67+87` locally as `154` without installed weights.
 - Visual browser check: selector, active-model label, Admin link, and redesigned
   dark console rendered correctly.
 
@@ -143,5 +167,7 @@ Run the web UI with `python3 -m lusas_ai web`, then open
   CPU/GPU/MPS memory.
 - Automatic learning stages candidates but requires an administrator for the
   final deployment approval, by design.
-- Web learning uses only configured and approved HTTPS sources; it does not
-  browse arbitrary sites or train directly from newly fetched content.
+- Web learning and fallback research use only configured and approved HTTPS
+  sources; they do not browse arbitrary sites or train directly from newly
+  fetched content. A general search provider is intentionally not enabled
+  without an administrator-approved endpoint and domain policy.
