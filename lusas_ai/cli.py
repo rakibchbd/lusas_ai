@@ -13,6 +13,7 @@ from .monitor import follow, report, snapshot
 from .service import install_service, remove_service, service_state
 from .updater import UpgradeResult, restore_backup
 from .web_learning import refresh as refresh_web
+from .web_ui import serve as serve_web
 
 
 def _project_root() -> Path:
@@ -82,6 +83,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "dashboard", help="Generate the local HTML control dashboard."
     )
+    web_ui_parser = subparsers.add_parser(
+        "web", help="Run the local interactive web console."
+    )
+    web_ui_parser.add_argument("--host", default="127.0.0.1")
+    web_ui_parser.add_argument("--port", type=int, default=8765)
     web_parser = subparsers.add_parser(
         "web-refresh",
         help="Fetch newly published items from configured allowlisted web feeds.",
@@ -238,6 +244,10 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "dashboard":
             print(f"Dashboard written to {write_dashboard(agent.settings)}")
+            return 0
+
+        if args.command == "web":
+            serve_web(_project_root(), host=args.host, port=args.port)
             return 0
 
         if args.command == "web-refresh":

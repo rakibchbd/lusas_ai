@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c111d">
+  <title>LUSAS AI · Local intelligence console</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="LUSAS AI home">
+        <span class="brand-mark">L</span>
+        <span>
+          <span class="brand-name">LUSAS AI</span>
+          <span class="brand-caption">LOCAL INTELLIGENCE CONSOLE</span>
+        </span>
+      </a>
+      <div class="topbar-actions">
+        <span class="connection-status" id="connection-status"><span class="status-dot"></span> CONNECTING</span>
+        <button class="icon-button" id="refresh-button" type="button" title="Refresh status" aria-label="Refresh status">↻</button>
+      </div>
+    </header>
+
+    <main class="main-grid">
+      <aside class="side-panel">
+        <div class="eyebrow">SYSTEM PULSE</div>
+        <div class="pulse-card">
+          <div class="pulse-orbit"><span></span></div>
+          <div>
+            <div class="pulse-label">LUSAS CORE</div>
+            <div class="pulse-value" id="core-state">READY</div>
+          </div>
+        </div>
+
+        <div class="metric-stack">
+          <div class="metric-row">
+            <span><span class="metric-icon violet">✦</span> Model version</span>
+            <strong id="metric-version">—</strong>
+          </div>
+          <div class="metric-row">
+            <span><span class="metric-icon blue">⌁</span> Knowledge records</span>
+            <strong id="metric-knowledge">—</strong>
+          </div>
+          <div class="metric-row">
+            <span><span class="metric-icon amber">◌</span> Web articles</span>
+            <strong id="metric-web">—</strong>
+          </div>
+          <div class="metric-row">
+            <span><span class="metric-icon green">↗</span> Upgrades</span>
+            <strong id="metric-upgrades">—</strong>
+          </div>
+        </div>
+
+        <div class="side-divider"></div>
+        <div class="eyebrow">RUNTIME</div>
+        <div class="runtime-list">
+          <div><span>Model upgrades</span><span class="mini-status" id="policy-model">—</span></div>
+          <div><span>Code evolution</span><span class="mini-status" id="policy-code">—</span></div>
+          <div><span>Web learning</span><span class="mini-status" id="policy-web">—</span></div>
+        </div>
+
+        <div class="side-footer">
+          <span class="lock-mark">⌾</span>
+          <span>Bound to localhost<br><small>Your data stays on this machine.</small></span>
+        </div>
+      </aside>
+
+      <section class="chat-panel" aria-label="LUSAS AI chat">
+        <div class="chat-header">
+          <div>
+            <div class="eyebrow">CONVERSATION</div>
+            <h1>Talk to your local intelligence.</h1>
+            <p>Ask questions, explore ideas, or build something together.</p>
+          </div>
+          <button class="clear-button" id="clear-button" type="button">Clear chat</button>
+        </div>
+
+        <div class="message-list" id="message-list" aria-live="polite">
+          <article class="message assistant-message welcome-message">
+            <div class="avatar assistant-avatar">L</div>
+            <div class="message-body">
+              <div class="message-meta"><strong>LUSAS AI</strong><span>LOCAL MODEL</span></div>
+              <p>Ready when you are. Start with a question or choose a prompt below.</p>
+            </div>
+          </article>
+          <div class="prompt-grid" id="prompt-grid">
+            <button type="button" data-prompt="Who is the founder of LUSAS AI?">Meet the founder</button>
+            <button type="button" data-prompt="Explain Python decorators with a small example.">Explain a concept</button>
+            <button type="button" data-prompt="What has changed recently in my local system?">Review system activity</button>
+          </div>
+        </div>
+
+        <form class="composer" id="composer">
+          <label class="sr-only" for="prompt-input">Message LUSAS AI</label>
+          <textarea id="prompt-input" rows="1" placeholder="Message LUSAS AI…" autocomplete="off"></textarea>
+          <div class="composer-footer">
+            <span><kbd>Enter</kbd> to send · <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line</span>
+            <button class="send-button" type="submit" id="send-button"><span>Send</span><span class="send-arrow">↗</span></button>
+          </div>
+        </form>
+        <div class="chat-note">LUSAS AI can make mistakes. Verify important results before acting on them.</div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

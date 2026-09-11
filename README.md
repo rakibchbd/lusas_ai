@@ -162,6 +162,17 @@ upgrade-history summaries, knowledge freshness, open gaps, skills, runtime
 controls, and measured score evidence. It does not expose hidden model
 reasoning or grant new permissions.
 
+Run the interactive localhost web console:
+
+~~~text
+python3 -m lusas_ai web
+open http://127.0.0.1:8765
+~~~
+
+The console uses the same local model and agent as `python3 -m lusas_ai chat`,
+with live runtime metrics and recent system state. It binds to `127.0.0.1` by
+default, so the chat API is not exposed to the network. Stop it with `Ctrl-C`.
+
 Use the runtime controls when you need to stop or narrow autonomous behavior:
 
 ~~~text
