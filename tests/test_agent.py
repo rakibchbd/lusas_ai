@@ -237,6 +237,24 @@ class AgentIdentityTests(unittest.TestCase):
             agent.model = FakeModel()
             self.assertEqual(agent.chat("hi"), "Hello! How can I help?")
 
+    def test_ambiguous_name_does_not_trigger_web_scraping_or_code(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+
+            class FailingModel:
+                def chat(self, prompt: str) -> str:
+                    raise AssertionError("ambiguous name should be clarified before generation")
+
+            agent.model = FailingModel()
+            response = agent.chat("rakin hasan")
+            self.assertEqual(
+                response,
+                "I don't have verified information about Rakin Hasan yet. "
+                "What would you like to know?",
+            )
+            self.assertNotIn("requests", response)
+            self.assertNotIn("https://", response)
+
     def test_common_personal_questions_use_model_response(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))

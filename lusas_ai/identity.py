@@ -32,6 +32,38 @@ FIRST_PERSON_PERSON_IDENTIFICATION = re.compile(
 )
 
 
+_NAME_ONLY_INPUT = re.compile(
+    r"^[A-Za-z][A-Za-z.'’-]{1,}(?:\s+[A-Za-z][A-Za-z.'’-]{1,}){1,3}[?.!,]*$"
+)
+_NAME_INPUT_EXCLUSIONS = {
+    "about",
+    "and",
+    "api",
+    "are",
+    "build",
+    "code",
+    "create",
+    "explain",
+    "for",
+    "function",
+    "generate",
+    "help",
+    "how",
+    "is",
+    "make",
+    "program",
+    "python",
+    "script",
+    "show",
+    "tell",
+    "the",
+    "what",
+    "who",
+    "why",
+    "write",
+}
+
+
 _INTERNAL_TAIL = re.compile(
     r"\s*(?:###\s*System:|System instructions:|Workspace context:|"
     r"###\s*Instruction:|an\s+internal\s+provider\s+policy\b|"
@@ -57,3 +89,21 @@ def is_creator_question(prompt: str) -> bool:
 
 def is_person_identity_question(prompt: str) -> bool:
     return bool(PERSON_IDENTITY_QUESTION.search(prompt))
+
+
+def is_ambiguous_name_prompt(prompt: str) -> bool:
+    """Recognize a short name fragment that needs clarification before answering."""
+    normalized = " ".join(prompt.strip().split())
+    words = normalized.rstrip("?.!,").split()
+    if not 2 <= len(words) <= 4 or not _NAME_ONLY_INPUT.fullmatch(normalized):
+        return False
+    return not any(word.lower() in _NAME_INPUT_EXCLUSIONS for word in words)
+
+
+def ambiguous_name_response(prompt: str) -> str:
+    """Ask for intent without inventing facts, URLs, or a profile for the name."""
+    name = " ".join(
+        word[:1].upper() + word[1:]
+        for word in prompt.strip().rstrip("?.!,").split()
+    )
+    return f"I don't have verified information about {name} yet. What would you like to know?"

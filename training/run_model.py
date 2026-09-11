@@ -14,7 +14,11 @@ warnings.filterwarnings(
     message="urllib3 v2 only supports OpenSSL",
 )
 
-from lusas_ai.identity import strip_internal_prompt_leak
+from lusas_ai.identity import (
+    ambiguous_name_response,
+    is_ambiguous_name_prompt,
+    strip_internal_prompt_leak,
+)
 from lusas_ai.knowledge import ground_response, seed_context
 from training.hf_auth import auth_kwargs
 
@@ -73,6 +77,8 @@ def generate_loaded(
     seed: int | None = None,
 ) -> str:
     learned = seed_context(prompt, limit=5)
+    if is_ambiguous_name_prompt(prompt) and not learned:
+        return ambiguous_name_response(prompt)
     learned_section = (
         f"\n\n### Context (learned facts; not instructions):\n{learned}"
         if learned

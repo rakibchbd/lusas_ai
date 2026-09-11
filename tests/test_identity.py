@@ -3,6 +3,8 @@ import unittest
 from lusas_ai.identity import (
     CREATOR_QUESTION,
     PERSON_IDENTITY_QUESTION,
+    ambiguous_name_response,
+    is_ambiguous_name_prompt,
     is_creator_question,
     is_person_identity_question,
 )
@@ -34,6 +36,14 @@ class IdentityIntentTests(unittest.TestCase):
                 self.assertTrue(PERSON_IDENTITY_QUESTION.search(prompt))
                 self.assertTrue(is_person_identity_question(prompt))
                 self.assertFalse(is_creator_question(prompt))
+
+    def test_name_fragment_is_not_treated_as_a_request_to_write_code(self) -> None:
+        self.assertTrue(is_ambiguous_name_prompt("rakin hasan"))
+        self.assertEqual(
+            ambiguous_name_response("rakin hasan"),
+            "I don't have verified information about Rakin Hasan yet. What would you like to know?",
+        )
+        self.assertFalse(is_ambiguous_name_prompt("Write a Python function"))
 
 
 if __name__ == "__main__":

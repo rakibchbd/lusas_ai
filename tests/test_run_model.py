@@ -100,6 +100,23 @@ class TrainedModelIdentityTests(unittest.TestCase):
         self.assertNotIn("Lusa Chowdhury", formatted)
         self.assertNotIn("Facts: LUSAS AI creator", formatted)
 
+    def test_ambiguous_name_is_clarified_without_generation(self) -> None:
+        tokenizer = self.FakeTokenizer()
+        response = generate_loaded(
+            self.FakeTorch(),
+            tokenizer,
+            self.FakeModel(),
+            "cpu",
+            "rakin hasan",
+            128,
+        )
+        self.assertEqual(
+            response,
+            "I don't have verified information about Rakin Hasan yet. "
+            "What would you like to know?",
+        )
+        self.assertEqual(tokenizer.formatted, "")
+
 
 if __name__ == "__main__":
     unittest.main()
