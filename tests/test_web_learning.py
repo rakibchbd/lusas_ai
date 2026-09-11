@@ -79,6 +79,25 @@ class WebLearningTests(unittest.TestCase):
             self.assertIn("added a feature", result)
             self.assertIn("unverified", result)
 
+    def test_definition_question_does_not_get_release_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            settings = Settings(root=root, web_learning_enabled=True)
+            settings.web_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            settings.web_cache_path.write_text(
+                json.dumps(
+                    {
+                        "id": "article-1",
+                        "title": "Python release",
+                        "url": "https://example.com/python",
+                        "summary": "A new Python release improves diagnostics.",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(context(settings, "What is Python?"), "")
+
     def test_context_is_bounded_for_the_local_model(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

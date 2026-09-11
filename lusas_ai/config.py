@@ -41,12 +41,12 @@ class Settings:
     root: Path
     model_path: str = "models/production"
     learning_file: str = ".lusas/learned.jsonl"
-    temperature: float = 0.2
-    top_p: float = 0.9
+    temperature: float = 0.0
+    top_p: float = 1.0
     top_k: int = 40
-    repeat_penalty: float = 1.1
+    repeat_penalty: float = 1.0
     num_ctx: int = 8192
-    num_predict: int = 1024
+    num_predict: int = 128
     seed: int | None = 42
     workspace: str = "workspace"
     autonomy_level: int = 5

@@ -5,9 +5,9 @@ runtime around it. The first practical model path is a LUSAS adapter trained
 from an open-weight coding model. It keeps model upgrades versioned, tested,
 and recoverable.
 
-The assistant identifies itself as **Lusa**, created by **Rakib Chowdhury**.
-That identity is enforced in the runtime and included in the training data so
-the model does not fall back to its foundation model's identity.
+The founder introduction is normalized into structured knowledge records. Those
+facts are retrieved only for relevant questions and supplied as context; they
+are not a system prompt or a fixed response template.
 
 Included:
 
@@ -75,8 +75,9 @@ Generation behavior is configurable in `config.json`: `temperature`, `top_p`,
 for the local model runtime. The defaults favor focused, repeatable coding
 answers.
 
-Teach LUSAS explicitly with approved examples. They are stored locally and
-included in the next automatic training cycle:
+Teach LUSAS explicitly with approved examples. They are stored locally as
+training examples and normalized knowledge records, then included in the next
+automatic training cycle:
 
 ~~~text
 python3 -m lusas_ai learn \
@@ -249,8 +250,9 @@ candidate, then start the interactive model runner:
 python3 training/run_model.py --model models/production --interactive
 ~~~
 
-LUSAS identifies itself as developed by Lusa Chowdhury (Rakib). The current
-local model is based on an open-weight coding model and fine-tuned locally.
+Questions about the project's founder are answered from the relevant structured
+facts. The current local model is based on an open-weight coding model and
+fine-tuned locally.
 
 Prepare a self-upgrade:
 

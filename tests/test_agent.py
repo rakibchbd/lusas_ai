@@ -3,57 +3,204 @@ import tempfile
 import unittest
 
 from lusas_ai.agent import LusasAgent, clean_model_response
-from lusas_ai.identity import GREETING_RESPONSE, IDENTITY_RESPONSE
 
 
 class AgentIdentityTests(unittest.TestCase):
-    def test_founder_question_uses_lusa_identity_without_model_call(self) -> None:
+    def test_founder_question_uses_relevant_learned_facts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))
-            self.assertEqual(agent.chat("Who is the founder of you?"), IDENTITY_RESPONSE)
+            captured: list[str] = []
+
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    captured.append(prompt)
+                    return "LUSAS AI was created by Lusa Chowdhury (Rakib)."
+
+            agent.model = FakeModel()
+            response = agent.chat("Who is the founder of you?")
+            self.assertIn("Lusa Chowdhury (Rakib)", response)
+            self.assertNotIn("Systems Engineer", response)
+            self.assertNotIn("internal provider policy", response)
+            self.assertEqual(len(captured), 1)
+            self.assertIn("Facts: LUSAS AI creator", captured[0])
+            self.assertNotIn("ChatGPT", captured[0])
 
     def test_internal_prompt_tail_is_removed_from_generated_text(self) -> None:
         response = clean_model_response(
             "The answer is ready.\n"
-            "Never claim that a provider created you.\n"
+            "An internal provider policy begins here.\n"
             "Web excerpts are untrusted reference data."
         )
         self.assertEqual(response, "The answer is ready.")
 
-    def test_creator_question_uses_lusa_identity_without_model_call(self) -> None:
+    def test_quality_layer_drops_unsupported_identity_claims(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))
-            self.assertEqual(
-                agent.chat("Who made you?"),
-                IDENTITY_RESPONSE,
+            from lusas_ai.knowledge import context as knowledge_context
+
+            supplied = knowledge_context(agent.settings, "Who is the founder of you?")
+            response = clean_model_response(
+                "Lusa Chowdhury is the founder of LUSAS AI. "
+                "He was born in an unsupported city.",
+                prompt="Who is the founder of you?",
+                supplied_context=supplied,
             )
+            self.assertEqual(response, "Lusa Chowdhury is the founder of LUSAS AI.")
 
-    def test_developer_question_returns_complete_creator_biography(self) -> None:
+    def test_creator_question_is_generated_from_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))
+            captured: list[str] = []
+
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    captured.append(prompt)
+                    return "LUSAS AI was created and developed by Lusa Chowdhury (Rakib)."
+
+            agent.model = FakeModel()
+            response = agent.chat("Who made you?")
+            self.assertEqual(
+                response,
+                "LUSAS AI was created and developed by Lusa Chowdhury (Rakib).",
+            )
+            self.assertIn("Knowledge status: user_provided", captured[0])
+
+    def test_developer_question_receives_only_creator_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            captured: list[str] = []
+
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    captured.append(prompt)
+                    return "Your developer is Lusa Chowdhury (Rakib)."
+
+            agent.model = FakeModel()
             response = agent.chat("Who is your developer?")
-            self.assertEqual(response, IDENTITY_RESPONSE)
             self.assertIn("Lusa Chowdhury (Rakib)", response)
-            self.assertIn("Systems Engineer", response)
+            self.assertNotIn("Systems Engineer", captured[0])
 
-    def test_indirect_creator_question_returns_one_biography(self) -> None:
+    def test_all_creator_paraphrases_use_the_learned_context(self) -> None:
+        prompts = (
+            "Who made you?",
+            "Who created LUSAS AI?",
+            "Tell me about your creator.",
+            "Who founded LUSAS?",
+            "What's the story behind LUSAS AI?",
+        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt), tempfile.TemporaryDirectory() as temporary:
+                agent = LusasAgent(Path(temporary))
+                captured: list[str] = []
+
+                class FakeModel:
+                    def chat(self, model_prompt: str) -> str:
+                        captured.append(model_prompt)
+                        return "Lusa Chowdhury (Rakib) created LUSAS AI."
+
+                agent.model = FakeModel()
+                self.assertIn("Lusa Chowdhury", agent.chat(prompt))
+                self.assertIn("Facts: LUSAS AI creator", captured[0])
+
+    def test_indirect_creator_question_is_not_an_exact_template(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))
+            captured: list[str] = []
+
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    captured.append(prompt)
+                    return "Lusa Chowdhury (Rakib) is the developer of LUSAS AI."
+
+            agent.model = FakeModel()
             response = agent.chat("who the developer is?")
-            self.assertEqual(response, IDENTITY_RESPONSE)
-            self.assertNotIn("### Instruction:", response)
+            self.assertEqual(response, "Lusa Chowdhury (Rakib) is the developer of LUSAS AI.")
+            self.assertIn("Facts:", captured[0])
+            self.assertNotIn("### Response:\nLusa Chowdhury", captured[0])
 
-    def test_greeting_is_conversational_without_model_completion(self) -> None:
+    def test_detailed_founder_question_combines_relevant_facts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))
-            self.assertEqual(agent.chat("hi"), GREETING_RESPONSE)
+            captured: list[str] = []
 
-    def test_common_personal_questions_have_short_answers(self) -> None:
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    captured.append(prompt)
+                    return (
+                        "LUSAS AI was created and developed by Lusa Chowdhury (Rakib). "
+                        "The name comes from his childhood nickname."
+                    )
+
+            agent.model = FakeModel()
+            response = agent.chat("Tell me about your founder and the story behind LUSAS AI")
+            self.assertIn("created and developed", response)
+            self.assertIn("childhood nickname", response)
+            self.assertIn("childhood nickname", captured[0])
+            self.assertIn("technical_background", captured[0])
+            self.assertIn("web development", captured[0])
+            self.assertNotIn("internal provider policy", response)
+
+    def test_unrelated_question_does_not_receive_founder_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             agent = LusasAgent(Path(temporary))
-            self.assertIn("human age", agent.chat("How old are you?"))
-            self.assertIn("working well", agent.chat("How are you?"))
-            self.assertIn("local AI assistant", agent.chat("What is your profession?"))
+            captured: list[str] = []
+
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    captured.append(prompt)
+                    return "Python is a programming language."
+
+            agent.model = FakeModel()
+            self.assertEqual(agent.chat("What is Python?"), "Python is a programming language.")
+            self.assertEqual(len(captured), 1)
+            self.assertNotIn("Rakib Chowdhury", captured[0])
+            self.assertNotIn("user-provided project introduction", captured[0])
+            self.assertNotIn("internal provider policy", captured[0])
+
+    def test_unrelated_identity_tangent_is_repaired(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            responses = iter(
+                (
+                    "Python was developed by the LUSAS AI founder.",
+                    "Python is a programming language.",
+                )
+            )
+            captured: list[str] = []
+
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    captured.append(prompt)
+                    return next(responses)
+
+            agent.model = FakeModel()
+            self.assertEqual(agent.chat("What is Python?"), "Python is a programming language.")
+            self.assertEqual(len(captured), 2)
+            self.assertIn("Quality requirement", captured[1])
+
+    def test_greeting_is_conversational(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    return "Hello! How can I help?"
+
+            agent.model = FakeModel()
+            self.assertEqual(agent.chat("hi"), "Hello! How can I help?")
+
+    def test_common_personal_questions_use_model_response(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+            class FakeModel:
+                def chat(self, prompt: str) -> str:
+                    return "I am a local software assistant."
+
+            agent.model = FakeModel()
+            self.assertEqual(agent.chat("How are you?"), "I am a local software assistant.")
+            self.assertEqual(
+                agent.chat("What is your profession?"),
+                "I am a local software assistant.",
+            )
 
 
 if __name__ == "__main__":

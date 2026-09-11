@@ -26,6 +26,38 @@ from .knowledge import upsert_web
 MAX_RESPONSE_BYTES = 2_000_000
 MAX_SUMMARY_CHARS = 3_000
 MAX_CONTEXT_CHARS = 6_000
+_RESEARCH_TERMS = {
+    "changelog",
+    "changed",
+    "changes",
+    "current",
+    "documentation",
+    "docs",
+    "latest",
+    "news",
+    "recent",
+    "recently",
+    "release",
+    "releases",
+    "update",
+    "updates",
+    "version",
+}
+_SEARCH_STOPWORDS = {
+    "about",
+    "and",
+    "are",
+    "for",
+    "how",
+    "in",
+    "is",
+    "me",
+    "of",
+    "on",
+    "the",
+    "to",
+    "what",
+}
 
 
 class _HTMLTextParser(HTMLParser):
@@ -385,13 +417,21 @@ def refresh(settings: Settings, force: bool = False) -> dict[str, object]:
 
 def search(settings: Settings, query: str, limit: int = 3) -> list[dict[str, str]]:
     """Return matching cached web snippets; never fetches or executes web content."""
-    terms = set(re.findall(r"[a-z0-9]{3,}", query.lower()))
+    terms = set(re.findall(r"[a-z0-9]{3,}", query.lower())) - _SEARCH_STOPWORDS
     if not terms:
         return []
     scored: list[tuple[int, dict[str, str]]] = []
     for article in _read_jsonl(settings.web_cache_path):
-        corpus = f"{article.get('title', '')} {article.get('summary', '')}".lower()
-        score = sum(corpus.count(term) for term in terms)
+        title_terms = set(re.findall(r"[a-z0-9]{3,}", article.get("title", "").lower()))
+        corpus_terms = set(
+            re.findall(
+                r"[a-z0-9]{3,}",
+                f"{article.get('title', '')} {article.get('summary', '')}".lower(),
+            )
+        )
+        score = len(terms.intersection(corpus_terms)) + 2 * len(
+            terms.intersection(title_terms)
+        )
         if score:
             scored.append((score, article))
     scored.sort(key=lambda pair: (pair[0], pair[1].get("fetched_at", "")), reverse=True)
@@ -399,6 +439,9 @@ def search(settings: Settings, query: str, limit: int = 3) -> list[dict[str, str
 
 
 def context(settings: Settings, query: str, limit: int = 3) -> str:
+    query_terms = set(re.findall(r"[a-z0-9]{3,}", query.lower()))
+    if not query_terms.intersection(_RESEARCH_TERMS):
+        return ""
     matches = search(settings, query, limit=limit)
     result = ""
     for item in matches:

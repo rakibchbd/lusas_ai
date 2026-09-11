@@ -1,8 +1,11 @@
 {
   "model_path": "models/production",
   "learning_file": ".lusas/learned.jsonl",
+  "temperature": 0.0,
+  "top_p": 1.0,
+  "repeat_penalty": 1.0,
+  "num_predict": 128,
   "num_ctx": 8192,
-  "num_predict": 1024,
   "seed": 42,
   "workspace": "workspace",
   "autonomy_level": 5,

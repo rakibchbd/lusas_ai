@@ -3,12 +3,98 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 import json
 from pathlib import Path
 import re
 from typing import Any, Iterable
 
 from .config import Settings
+
+
+SEED_FACTS: tuple[dict[str, Any], ...] = (
+    {
+        "knowledge_id": "lusas-founder",
+        "topic": "LUSAS AI founder and creator",
+        "content": "LUSAS AI was created and developed by Lusa Chowdhury (Rakib), also known as Rakib Chowdhury.",
+        "facts": [
+            {
+                "subject": "LUSAS AI",
+                "relation": "creator",
+                "object": "Lusa Chowdhury (Rakib), also known as Rakib Chowdhury",
+            }
+        ],
+        "related_topics": ["founder", "creator", "Lusa", "Rakib Chowdhury"],
+    },
+    {
+        "knowledge_id": "lusas-name-origin",
+        "topic": "LUSAS AI name origin",
+        "content": "The name LUSAS AI was inspired by Lusa, Rakib Chowdhury's childhood nickname used by family and people from his village.",
+        "facts": [
+            {
+                "subject": "LUSAS AI",
+                "relation": "name_origin",
+                "object": "Lusa, a childhood nickname of Rakib Chowdhury",
+            }
+        ],
+        "related_topics": ["origin", "nickname", "history"],
+    },
+    {
+        "knowledge_id": "lusas-founder-background",
+        "topic": "Rakib Chowdhury technical background",
+        "content": "Rakib Chowdhury began learning web development in 2011, studied Python and machine learning from 2017, and has worked as a Systems Engineer since 2021 in servers, hosting, administration, deployment, and backend technologies.",
+        "facts": [
+            {
+                "subject": "Rakib Chowdhury",
+                "relation": "technical_background",
+                "object": "web development, Python, machine learning, systems engineering, servers, hosting, deployment, and backend technologies",
+            }
+        ],
+        "related_topics": ["background", "Python", "machine learning", "Systems Engineer"],
+    },
+)
+
+
+_RETRIEVAL_CACHE: dict[Path, tuple[int, list[dict[str, Any]]]] = {}
+_RESEARCH_TERMS = {
+    "changelog",
+    "changed",
+    "changes",
+    "current",
+    "documentation",
+    "docs",
+    "latest",
+    "news",
+    "recent",
+    "recently",
+    "release",
+    "releases",
+    "update",
+    "updates",
+    "version",
+}
+_UNSUPPORTED_PERSONAL_CLAIMS = (
+    "born",
+    "birth",
+    "city",
+    "country",
+    "former",
+    "his name is",
+    "her name is",
+    "known for",
+    "lives in",
+    "startup",
+)
+_CONTRADICTORY_IDENTITY_CLAIMS = (
+    "he was created",
+    "she was created",
+    "he is an ai",
+    "she is an ai",
+)
+_INCOMPLETE_ENDINGS = re.compile(
+    r"\b(?:also|and|or|the|a|an|to|of|in|for|with|has|have)$",
+    re.IGNORECASE,
+)
 
 
 def _read(path: Path) -> list[dict[str, Any]]:
@@ -50,6 +136,25 @@ def _domain(text: str) -> str:
     return "general"
 
 
+def _terms(text: str) -> set[str]:
+    aliases = {
+        "made": "creator",
+        "created": "creator",
+        "developed": "creator",
+        "developer": "creator",
+        "founded": "creator",
+        "founder": "creator",
+        "maker": "creator",
+        "built": "creator",
+        "story": "origin",
+        "history": "origin",
+    }
+    return {
+        aliases.get(term, term)
+        for term in re.findall(r"[a-z][a-z0-9_-]{2,}", text.lower())
+    }
+
+
 def _confidence(verification_status: str) -> float:
     return {
         "corroborated": 0.8,
@@ -61,6 +166,51 @@ def _confidence(verification_status: str) -> float:
 def _concepts(text: str) -> list[str]:
     words = re.findall(r"[a-z][a-z0-9_-]{3,}", text.lower())
     return sorted(set(words))[:20]
+
+
+def _seed_record(seed: dict[str, Any], now: str) -> dict[str, Any]:
+    index_text = " ".join(
+        [seed["topic"], seed["content"], *seed.get("related_topics", [])]
+    )
+    return {
+        "id": seed["knowledge_id"],
+        "knowledge_id": seed["knowledge_id"],
+        "kind": "fact",
+        "topic": seed["topic"],
+        "content": seed["content"],
+        "facts": seed["facts"],
+        "source": "user-provided project introduction",
+        "source_type": "user_introduction",
+        "created_at": now,
+        "updated_at": now,
+        "confidence": 1.0,
+        "verification_status": "user_provided",
+        "verification": "user_provided",
+        "related_topics": seed.get("related_topics", []),
+        "dependencies": [],
+        "embeddings": None,
+        "usage_count": 0,
+        "last_used": None,
+        "index_terms": sorted(_terms(index_text)),
+        "scope": "personal_identity",
+        "domain": "general",
+        "concepts": _concepts(index_text),
+    }
+
+
+def ensure_seed(settings: Settings) -> list[dict[str, Any]]:
+    """Store the introduction as separate facts, not as a response template."""
+    current = _read(settings.knowledge_path)
+    by_id = {item.get("knowledge_id", item.get("id")): item for item in current}
+    now = datetime.now(timezone.utc).isoformat()
+    for seed in SEED_FACTS:
+        if seed["knowledge_id"] not in by_id:
+            by_id[seed["knowledge_id"]] = _seed_record(seed, now)
+    result = list(by_id.values())
+    if result != current:
+        _write(settings.knowledge_path, result)
+    _RETRIEVAL_CACHE.pop(settings.knowledge_path, None)
+    return result
 
 
 def upsert_web(settings: Settings, articles: list[dict[str, str]]) -> int:
@@ -84,18 +234,34 @@ def upsert_web(settings: Settings, articles: list[dict[str, str]]) -> int:
             if previous and previous_observed == observed
             else (now + timedelta(days=30)).isoformat()
         )
+        index_text = f"{article.get('title', '')} {article.get('summary', '')}"
         existing[article_id] = {
             "id": article_id,
+            "knowledge_id": article_id,
             "kind": "web_evidence",
+            "topic": article.get("title", ""),
+            "content": article.get("summary", ""),
+            "facts": [article.get("summary", "")],
             "claim": article.get("summary", ""),
             "title": article.get("title", ""),
             "source": article.get("url", ""),
             "source_feed": article.get("source", ""),
+            "source_type": "allowlisted_web",
+            "created_at": previous.get("created_at", observed) if previous else observed,
+            "updated_at": now.isoformat(),
             "observed_at": observed,
             "checked_at": now.isoformat(),
             "expires_at": expires_at,
             "verification": verification,
+            "verification_status": verification,
             "confidence": _confidence(verification),
+            "related_topics": [],
+            "dependencies": [],
+            "embeddings": None,
+            "usage_count": previous.get("usage_count", 0) if previous else 0,
+            "last_used": previous.get("last_used") if previous else None,
+            "index_terms": sorted(_terms(index_text)),
+            "scope": "general",
             "domain": _domain(
                 f"{article.get('title', '')} {article.get('summary', '')}"
             ),
@@ -103,13 +269,193 @@ def upsert_web(settings: Settings, articles: list[dict[str, str]]) -> int:
                 f"{article.get('title', '')} {article.get('summary', '')}"
             ),
         }
-    records = list(existing.values())[-max(1, settings.web_max_items) :]
+    seed_records = [item for item in existing.values() if item.get("kind") == "fact"]
+    web_records = [item for item in existing.values() if item.get("kind") != "fact"]
+    records = seed_records + web_records[-max(1, settings.web_max_items) :]
     _write(settings.knowledge_path, records)
+    _RETRIEVAL_CACHE.pop(settings.knowledge_path, None)
     return len(records)
+
+
+def ingest_learning(
+    settings: Settings,
+    instruction: str,
+    output: str,
+    *,
+    source_type: str = "approved_learning",
+) -> dict[str, Any]:
+    """Normalize an approved example into searchable knowledge alongside training data."""
+    content = re.sub(r"\s+", " ", output).strip()[:5_000]
+    instruction = re.sub(r"\s+", " ", instruction).strip()[:1_000]
+    if not instruction or not content:
+        raise ValueError("Learning content cannot be empty.")
+    knowledge_id = sha256(f"{instruction}\n{content}".encode("utf-8")).hexdigest()
+    current = _read(settings.knowledge_path)
+    previous = next((item for item in current if item.get("knowledge_id") == knowledge_id), None)
+    now = datetime.now(timezone.utc).isoformat()
+    record = {
+        "id": knowledge_id,
+        "knowledge_id": knowledge_id,
+        "kind": "learned_fact",
+        "topic": instruction,
+        "content": content,
+        "facts": [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", content) if sentence.strip()][:20],
+        "source": "approved local learning example",
+        "source_type": source_type,
+        "created_at": previous.get("created_at", now) if previous else now,
+        "updated_at": now,
+        "confidence": 0.7,
+        "verification_status": "user_provided",
+        "verification": "user_provided",
+        "related_topics": sorted(_terms(f"{instruction} {content}"))[:20],
+        "dependencies": [],
+        "embeddings": None,
+        "usage_count": previous.get("usage_count", 0) if previous else 0,
+        "last_used": previous.get("last_used") if previous else None,
+        "index_terms": sorted(_terms(f"{instruction} {content}")),
+        "scope": "general",
+        "domain": _domain(f"{instruction} {content}"),
+        "concepts": _concepts(f"{instruction} {content}"),
+    }
+    updated = [item for item in current if item.get("knowledge_id") != knowledge_id]
+    updated.append(record)
+    _write(settings.knowledge_path, updated)
+    _RETRIEVAL_CACHE.pop(settings.knowledge_path, None)
+    return record
 
 
 def records(settings: Settings) -> list[dict[str, Any]]:
     return _read(settings.knowledge_path)
+
+
+def _cached_records(settings: Settings) -> list[dict[str, Any]]:
+    path = settings.knowledge_path
+    try:
+        signature = path.stat().st_mtime_ns
+    except OSError:
+        return []
+    cached = _RETRIEVAL_CACHE.get(path)
+    if cached and cached[0] == signature:
+        return cached[1]
+    loaded = _read(path)
+    _RETRIEVAL_CACHE[path] = (signature, loaded)
+    return loaded
+
+
+def _retrieve_records(
+    query: str, source_records: list[dict[str, Any]], limit: int = 5
+) -> list[dict[str, Any]]:
+    """Rank normalized records without turning their prose into instructions."""
+    query_terms = _terms(query)
+    if not query_terms:
+        return []
+    identity_query = bool(
+        query_terms.intersection({"creator", "lusas", "lusa", "rakib", "origin"})
+    )
+    scored: list[tuple[int, dict[str, Any]]] = []
+    for item in source_records:
+        if (
+            item.get("kind") == "web_evidence"
+            and not query_terms.intersection(_RESEARCH_TERMS)
+        ):
+            continue
+        if item.get("scope") == "personal_identity" and not identity_query:
+            continue
+        indexed = set(item.get("index_terms", []))
+        if not indexed:
+            indexed = _terms(
+                f"{item.get('topic', '')} {item.get('content', '')} "
+                f"{' '.join(str(item.get('related_topics', [])))}"
+            )
+        score = len(query_terms.intersection(indexed))
+        if score:
+            item["usage_count"] = int(item.get("usage_count", 0)) + 1
+            item["last_used"] = datetime.now(timezone.utc).isoformat()
+            scored.append((score, item))
+    scored.sort(
+        key=lambda pair: (pair[0], str(pair[1].get("updated_at", ""))),
+        reverse=True,
+    )
+    return [item for _, item in scored[: max(1, limit)]]
+
+
+def retrieve(settings: Settings, query: str, limit: int = 5) -> list[dict[str, Any]]:
+    """Retrieve relevant facts with normalized terms and an in-process index cache."""
+    return _retrieve_records(query, _cached_records(settings), limit=limit)
+
+
+def _format_context(matches: list[dict[str, Any]]) -> str:
+    chunks: list[str] = []
+    for item in matches:
+        facts = item.get("facts", [])
+        fact_text = "; ".join(
+            f"{fact.get('subject')} {fact.get('relation')} {fact.get('object')}"
+            if isinstance(fact, dict)
+            else str(fact)
+            for fact in facts[:10]
+        )
+        chunks.append(
+            f"Topic: {item.get('topic', '')}\n"
+            f"Knowledge status: {item.get('verification_status', 'uncertain')}\n"
+            f"Facts: {fact_text or item.get('content', item.get('claim', ''))}"
+        )
+    return "\n\n".join(chunks)
+
+
+def context(settings: Settings, query: str, limit: int = 5) -> str:
+    """Format only relevant structured knowledge for the model's context layer."""
+    return _format_context(retrieve(settings, query, limit=limit))
+
+
+def seed_context(query: str, limit: int = 5) -> str:
+    """Return relevant built-in facts for direct model runs without a project path."""
+    now = datetime.now(timezone.utc).isoformat()
+    seed_records = [_seed_record(seed, now) for seed in SEED_FACTS]
+    return _format_context(_retrieve_records(query, seed_records, limit=limit))
+
+
+def ground_response(query: str, response: str, supplied_context: str) -> str:
+    """Drop unsupported biography claims while preserving the model's wording."""
+    from .identity import is_creator_question
+
+    if not supplied_context or not is_creator_question(query):
+        return response.strip()
+    context_terms = _terms(supplied_context)
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", response)
+        if sentence.strip()
+    ]
+    grounded: list[str] = []
+    for sentence in sentences:
+        sentence_lower = sentence.lower()
+        if any(
+            marker in sentence_lower and marker not in supplied_context.lower()
+            for marker in _UNSUPPORTED_PERSONAL_CLAIMS
+        ) or _INCOMPLETE_ENDINGS.search(sentence):
+            continue
+        if any(marker in sentence_lower for marker in _CONTRADICTORY_IDENTITY_CLAIMS):
+            continue
+        sentence_terms = _terms(sentence)
+        unknown_terms = sentence_terms - context_terms
+        # A few connective words are expected in a natural answer. A sentence
+        # dominated by terms absent from the supplied facts is likely a model
+        # hallucination, so omit it instead of presenting it as known.
+        if len(unknown_terms) <= max(4, len(sentence_terms) // 2):
+            grounded.append(sentence)
+    return " ".join(grounded).strip() or "I don't know that detail yet."
+
+
+def needs_response_repair(
+    query: str, response: str, supplied_context: str = ""
+) -> bool:
+    """Detect a likely unrelated project-identity tangent in a model answer."""
+    if supplied_context:
+        return False
+    query_terms = _terms(query)
+    if query_terms.intersection({"lusa", "lusas", "rakib"}):
+        return False
+    return bool(_terms(response).intersection({"lusa", "lusas", "rakib"}))
 
 
 def is_outdated(record: dict[str, Any], now: datetime | None = None) -> bool:
