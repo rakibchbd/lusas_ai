@@ -134,6 +134,19 @@ class TrainedModelIdentityTests(unittest.TestCase):
         )
         self.assertEqual(tokenizer.formatted, "")
 
+    def test_routine_conversation_is_answered_without_generation(self) -> None:
+        tokenizer = self.FakeTokenizer()
+        response = generate_loaded(
+            self.FakeTorch(),
+            tokenizer,
+            self.FakeModel(),
+            "cpu",
+            "Hello",
+            128,
+        )
+        self.assertEqual(response, "Hello! I'm LUSAS AI. How can I help?")
+        self.assertEqual(tokenizer.formatted, "")
+
 
 if __name__ == "__main__":
     unittest.main()

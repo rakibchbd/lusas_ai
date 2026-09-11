@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import Settings
+from .conversation import quick_response
 from .identity import (
     ambiguous_name_response,
     is_ambiguous_name_prompt,
@@ -99,6 +100,9 @@ class LusasAgent:
         )
 
     def chat(self, prompt: str) -> str:
+        routine_response = quick_response(prompt)
+        if routine_response is not None:
+            return routine_response
         context = self.workspace.snapshot()
         learned = knowledge_context(self.settings, prompt, limit=5)
         if is_ambiguous_name_prompt(prompt) and not learned:

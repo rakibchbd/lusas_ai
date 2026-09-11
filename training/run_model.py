@@ -21,6 +21,7 @@ from lusas_ai.identity import (
     unknown_person_response,
     unknown_person_subject,
 )
+from lusas_ai.conversation import quick_response
 from lusas_ai.knowledge import ground_response, seed_context
 from training.hf_auth import auth_kwargs
 
@@ -78,6 +79,9 @@ def generate_loaded(
     num_ctx: int | None = None,
     seed: int | None = None,
 ) -> str:
+    routine_response = quick_response(prompt)
+    if routine_response is not None:
+        return routine_response
     learned = seed_context(prompt, limit=5)
     if is_ambiguous_name_prompt(prompt) and not learned:
         return ambiguous_name_response(prompt)

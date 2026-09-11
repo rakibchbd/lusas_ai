@@ -235,7 +235,20 @@ class AgentIdentityTests(unittest.TestCase):
                     return "Hello! How can I help?"
 
             agent.model = FakeModel()
-            self.assertEqual(agent.chat("hi"), "Hello! How can I help?")
+            self.assertEqual(agent.chat("hi"), "Hello! I'm LUSAS AI. How can I help?")
+
+    def test_capability_question_is_conversational(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            agent = LusasAgent(Path(temporary))
+
+            class FailingModel:
+                def chat(self, prompt: str) -> str:
+                    raise AssertionError("routine capability prompt should not need generation")
+
+            agent.model = FailingModel()
+            response = agent.chat("what you know?")
+            self.assertIn("structured project knowledge", response)
+            self.assertIn("guarded upgrades", response)
 
     def test_ambiguous_name_does_not_trigger_web_scraping_or_code(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -280,7 +293,10 @@ class AgentIdentityTests(unittest.TestCase):
                     return "I am a local software assistant."
 
             agent.model = FakeModel()
-            self.assertEqual(agent.chat("How are you?"), "I am a local software assistant.")
+            self.assertEqual(
+                agent.chat("How are you?"),
+                "I'm ready to help with your local project. What would you like to work on?",
+            )
             self.assertEqual(
                 agent.chat("What is your profession?"),
                 "I am a local software assistant.",
